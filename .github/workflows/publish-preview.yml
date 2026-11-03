@@ -1,24 +1,48 @@
-name: Publicar primeira previa verificada
+name: Publicar previa verificada
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Tag do rascunho (ex. v0.2.0)
+        required: true
+        type: string
+      expected_commit:
+        description: SHA completo do commit do lancamento
+        required: true
+        type: string
+      artifact_run_id:
+        description: Build Windows aprovado com os artefatos
+        required: true
+        type: string
 permissions:
   contents: write
   actions: read
+concurrency:
+  group: publish-${{ inputs.release_tag }}
+  cancel-in-progress: false
 jobs:
   publish:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      ARTIFACT_RUN: ${{ inputs.artifact_run_id }}
     steps:
-      - name: Conferir rascunho e build aprovado
+      - name: Conferir rascunho, commit e arvore do build aprovado
         run: |
-          test "$(gh release view v0.1.0 --json isDraft --jq .isDraft)" = true
-          test "$(gh release view v0.1.0 --json targetCommitish --jq .targetCommitish)" = 7752095e5cf4ae57506898b24ca472037c692396
-          test "$(gh run view 41645974301 --json conclusion --jq .conclusion)" = success
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ARTIFACT_RUN" =~ ^[0-9]+$ ]]
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          test "$(gh release view "$RELEASE_TAG" --json targetCommitish --jq .targetCommitish)" = "$EXPECTED_COMMIT"
+          test "$(gh run view "$ARTIFACT_RUN" --json conclusion --jq .conclusion)" = success
+          BUILD_SHA=$(gh run view "$ARTIFACT_RUN" --json headSha --jq .headSha)
+          test "$(gh api "repos/$GH_REPO/git/commits/$BUILD_SHA" --jq .tree.sha)" = "$(gh api "repos/$GH_REPO/git/commits/$EXPECTED_COMMIT" --jq .tree.sha)"
       - name: Baixar artefatos e conferir hashes
         run: |
-          gh run download 41645974301 -n Central-IA-Studio-Windows-x64 -D assets
+          gh run download "$ARTIFACT_RUN" -n Central-IA-Studio-Windows-x64 -D assets
           cd assets
           sha256sum --check SHA256SUMS.txt
           python - <<'PY'
@@ -30,6 +54,6 @@ jobs:
           PY
       - name: Anexar e publicar previa
         run: |
-          gh release upload v0.1.0 assets/Central-IA-Studio-Windows-x64.zip assets/central-ia-studio-source.zip assets/SHA256SUMS.txt --clobber
-          test "$(gh release view v0.1.0 --json assets --jq '.assets | length')" = 3
-          gh release edit v0.1.0 --draft=false --prerelease
+          gh release upload "$RELEASE_TAG" assets/Central-IA-Studio-Windows-x64.zip assets/central-ia-studio-source.zip assets/SHA256SUMS.txt --clobber
+          test "$(gh release view "$RELEASE_TAG" --json assets --jq '.assets | length')" = 3
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease

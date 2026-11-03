@@ -8,6 +8,7 @@ jobs:
     runs-on: windows-2022
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,7 +27,26 @@ jobs:
           ref: d1044bc82712fbf08996080bef6298b24a27e9c7
           path: work/llama-upstream
       - run: python -m pip install -r engine/tests/requirements.txt
+      - name: Verificar se o motor continua identico ao build aprovado
+        id: engine_source
+        shell: pwsh
+        run: |
+          $same = (git rev-parse HEAD:engine) -eq 'e8621eaeee53cb16b7865133522453a7b25708ce'
+          "reuse=$($same.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+      - name: Recuperar motor aprovado quando as fontes forem identicas
+        id: engine_cache
+        if: steps.engine_source.outputs.reuse == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh run download 41663434185 -n Central-Engine-Windows-x64-CPU -D work/engine-package
+          if ($LASTEXITCODE -ne 0) { throw 'Motor anterior indisponivel; compilacao sera executada' }
+          python -c "import hashlib; from pathlib import Path; root=Path('work/engine-package'); rows=(root/'SHA256SUMS.txt').read_text().splitlines(); assert all(hashlib.sha256((root/n).read_bytes()).hexdigest()==h for h,n in (row.split('  ',1) for row in rows))"
+          if ($LASTEXITCODE -ne 0) { throw 'Hash incorreto; compilacao sera executada' }
       - name: Compilar Central Engine CPU x64
+        if: steps.engine_cache.outcome != 'success'
         shell: pwsh
         run: |
           cmake -S engine -B work/engine-build -G "Visual Studio 17 2022" -A x64 -DCENTRAL_LLAMA_SOURCE="$PWD/work/llama-upstream"
@@ -38,9 +58,11 @@ jobs:
         run: |
           python engine/tests/make_tiny_gguf.py work/llama-upstream work/tiny.gguf
           if ($LASTEXITCODE -ne 0) { throw 'Fixture falhou' }
-          python engine/tests/test_engine_http.py work/engine-build/bin/Release/central-engine-nocuda.exe work/tiny.gguf
+          $binary = if ('${{ steps.engine_cache.outcome }}' -eq 'success') { 'work/engine-package/central-engine-nocuda.exe' } else { 'work/engine-build/bin/Release/central-engine-nocuda.exe' }
+          python engine/tests/test_engine_http.py $binary work/tiny.gguf
           if ($LASTEXITCODE -ne 0) { throw 'Teste real do motor falhou' }
-      - run: python engine/scripts/package_engine.py work/engine-build/bin/Release/central-engine-nocuda.exe work/llama-upstream work/engine-package
+      - if: steps.engine_cache.outcome != 'success'
+        run: python engine/scripts/package_engine.py work/engine-build/bin/Release/central-engine-nocuda.exe work/llama-upstream work/engine-package
 
       - run: npm ci --prefix frontend
       - run: npm run build --prefix frontend
@@ -59,7 +81,7 @@ jobs:
             for ($i=0; $i -lt 20; $i++) {
               try {
                 $r = Invoke-RestMethod 'http://127.0.0.1:8765/api/bootstrap'
-                if ($r.version -eq '0.1.0') { $ready = $true; break }
+                if ($r.version -eq '0.2.0') { $ready = $true; break }
               } catch { Start-Sleep -Seconds 1 }
             }
             if (!$ready) { throw 'Executavel empacotado nao iniciou' }
@@ -67,10 +89,37 @@ jobs:
             if (!(Test-Path $r.settings.executable)) { throw 'Executavel do motor ausente' }
             $page = Invoke-WebRequest 'http://127.0.0.1:8765/'
             if (!$page.Content.Contains('Central IA Studio')) { throw 'Frontend ausente' }
+            $releaseHeaders = @{ 'X-Central-Token' = $r.token }
+            $releaseModelDir = Join-Path $PWD 'work/package smoke/modelo de teste'
+            New-Item -ItemType Directory -Force $releaseModelDir | Out-Null
+            $releaseModelPath = Join-Path $releaseModelDir 'tiny.gguf'
+            Copy-Item 'work/tiny.gguf' $releaseModelPath
+            $releaseSettings = @{engine_url='http://127.0.0.1:5001'; executable=$r.settings.executable; folders=@($releaseModelDir)}
+            Invoke-RestMethod 'http://127.0.0.1:8765/api/settings' -Method Put -Headers $releaseHeaders -ContentType 'application/json' -Body ($releaseSettings | ConvertTo-Json) | Out-Null
+            $releaseProfile = $r.profile
+            $releaseProfile.cache_kv = 'f16'; $releaseProfile.flash_attention = $false; $releaseProfile.max_output = 8
+            $releaseStarted = Invoke-RestMethod 'http://127.0.0.1:8765/api/engine/start' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body (@{path=$releaseModelPath; profile=$releaseProfile} | ConvertTo-Json)
+            $releaseEnginePid = $releaseStarted.pid
+            $releaseConnected = $false
+            for ($i=0; $i -lt 30; $i++) {
+              $releaseStatus = Invoke-RestMethod 'http://127.0.0.1:8765/api/engine'
+              if ($releaseStatus.connected) { $releaseConnected = $true; break }
+              Start-Sleep -Seconds 1
+            }
+            if (!$releaseConnected) { throw 'Studio EXE nao conectou ao motor incluido' }
+            $releaseConversation = Invoke-RestMethod 'http://127.0.0.1:8765/api/conversations' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{"title":"Teste EXE com motor"}'
+            $releaseReply = Invoke-WebRequest 'http://127.0.0.1:8765/api/generate' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body (@{conversation=$releaseConversation.id; content='Teste real do pacote'; profile=$releaseProfile} | ConvertTo-Json)
+            if (!$releaseReply.Content.Contains('event: done') -or $releaseReply.Content.Contains('event: error')) { throw 'Chat pelo Studio EXE falhou' }
+            $releaseHistory = Invoke-RestMethod "http://127.0.0.1:8765/api/conversations/$($releaseConversation.id)"
+            if ($null -eq $releaseHistory[-1].stats.generated_tokens) { throw 'Tokens nao registrados pelo Studio EXE' }
+            Invoke-RestMethod 'http://127.0.0.1:8765/api/engine/stop' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{}' | Out-Null
+            Write-Host 'Studio EXE -> Central Engine incluido -> GGUF aleatorio -> SSE -> SQLite: passou.'
+
             Invoke-WebRequest 'http://127.0.0.1:8765/api/source' -OutFile 'work/bundled-source.zip'
             python -c "from zipfile import ZipFile; z=ZipFile('work/bundled-source.zip'); assert z.testzip() is None; assert 'backend/app.py' in z.namelist()"
             if ($LASTEXITCODE -ne 0) { throw 'Fontes correspondentes ausentes' }
           } finally {
+            if ($releaseEnginePid) { Stop-Process -Id $releaseEnginePid -ErrorAction SilentlyContinue }
             if (!$process.HasExited) { Stop-Process -Id $process.Id }
           }
       - uses: actions/upload-artifact@v4

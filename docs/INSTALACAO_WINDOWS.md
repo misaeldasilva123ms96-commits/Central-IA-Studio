@@ -3,7 +3,10 @@
 ## Pacote Windows pronto
 
 Em Lançamentos, baixe Central-IA-Studio-Windows-x64.zip e extraia tudo. Abra
-INICIAR_CENTRAL_IA_STUDIO.cmd. Esse pacote inclui o runtime Python; não execute
+CentralIAStudio\CentralIAStudio.exe por duplo clique, ou use
+INICIAR_CENTRAL_IA_STUDIO.cmd. Extraia todo o ZIP e mantenha as pastas _internal
+e engine ao lado do EXE. Não copie apenas o arquivo EXE para outra pasta.
+Esse pacote inclui o runtime Python e o Central Engine; não execute
 PREPARAR_WINDOWS.cmd para ele. Confira os hashes em SHA256SUMS.txt. O runner
 Windows valida inicialização HTTP; inferência no notebook ainda precisa ser testada.
 
