@@ -1,0 +1,16 @@
+work/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+data/
+*.gguf
+*.exe
+*.spec
+build/
+.pytest_cache/
+
+/dist/
+central-ia-studio-source.zip
+Central-IA-Studio-Windows-x64.zip
+SHA256SUMS.txt
