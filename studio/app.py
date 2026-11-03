@@ -157,3 +157,4 @@ async def chat(request: ChatRequest):
             yield sse("done", {"warning": "O motor encerrou o fluxo sem sinalizador [DONE]."})
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
