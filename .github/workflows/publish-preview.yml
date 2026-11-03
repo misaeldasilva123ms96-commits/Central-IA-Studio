@@ -1,0 +1,35 @@
+name: Publicar primeira previa verificada
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Conferir rascunho e build aprovado
+        run: |
+          test "$(gh release view v0.1.0 --json isDraft --jq .isDraft)" = true
+          test "$(gh release view v0.1.0 --json targetCommitish --jq .targetCommitish)" = 7752095e5cf4ae57506898b24ca472037c692396
+          test "$(gh run view 41645974301 --json conclusion --jq .conclusion)" = success
+      - name: Baixar artefatos e conferir hashes
+        run: |
+          gh run download 41645974301 -n Central-IA-Studio-Windows-x64 -D assets
+          cd assets
+          sha256sum --check SHA256SUMS.txt
+          python - <<'PY'
+          from zipfile import ZipFile
+          from pathlib import Path
+          for p in Path('.').glob('*.zip'):
+              with ZipFile(p) as z:
+                  assert z.testzip() is None, p
+          PY
+      - name: Anexar e publicar previa
+        run: |
+          gh release upload v0.1.0 assets/Central-IA-Studio-Windows-x64.zip assets/central-ia-studio-source.zip assets/SHA256SUMS.txt --clobber
+          test "$(gh release view v0.1.0 --json assets --jq '.assets | length')" = 3
+          gh release edit v0.1.0 --draft=false --prerelease
