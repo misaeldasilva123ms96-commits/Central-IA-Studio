@@ -1,0 +1,52 @@
+{
+  "koboldcpp": {
+    "tag": "v1.124.2",
+    "commit": "6d2fedf8624e5f05926af3191f9efdcb13c4133c"
+  },
+  "lite": {
+    "commit": "42032c7acfc194d262de9d9ae86160555e0ab47f",
+    "correspondence_to_embedded_lite": "not established"
+  },
+  "files": [
+    {
+      "repository": "koboldcpp",
+      "path": "koboldcpp.py",
+      "sha256": "0b8a4fb8789783246c621f2174dc82d137117df11fd1312214e1a333e8a3149e"
+    },
+    {
+      "repository": "koboldcpp",
+      "path": "kcpp_src/gpttype_adapter.cpp",
+      "sha256": "731c488f2d16f0894cf66c4a510a751c165eee0d1661e49ac90a3ff30ebb50bc"
+    },
+    {
+      "repository": "koboldcpp",
+      "path": "src/llama-arch.cpp",
+      "sha256": "c842acb4e32c7a3f6394772708ddd7cd6f2decf16668d6dc761f37f8575e1fb6"
+    },
+    {
+      "repository": "koboldcpp",
+      "path": "LICENSE.md",
+      "sha256": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
+    },
+    {
+      "repository": "koboldcpp",
+      "path": "src/LLAMACPP_LICENSE",
+      "sha256": "ddb00ed82a92f48cc57661088f0f29b3f77945c3f190968e4cc744b02481bff4"
+    },
+    {
+      "repository": "koboldcpp",
+      "path": "ggml/src/GGML_LICENSE",
+      "sha256": "ddb00ed82a92f48cc57661088f0f29b3f77945c3f190968e4cc744b02481bff4"
+    },
+    {
+      "repository": "lite",
+      "path": "index.html",
+      "sha256": "b1b4e1e1a3189f5cfed14764417fb22d034d92929b5ec3a1cfec962e9b3bc52d"
+    },
+    {
+      "repository": "lite",
+      "path": "LICENSE.md",
+      "sha256": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
+    }
+  ]
+}

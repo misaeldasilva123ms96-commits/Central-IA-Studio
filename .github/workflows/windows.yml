@@ -1,0 +1,52 @@
+name: Validar e empacotar Windows x64
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+jobs:
+  windows:
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: python -m pip install -r requirements-dev.txt
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+      - run: python -m pytest -q
+      - run: python scripts/python_notices.py
+      - run: python scripts/package_source.py
+      - shell: pwsh
+        run: ./scripts/build_windows.ps1
+      - shell: pwsh
+        run: |
+          $process = Start-Process 'dist/CentralIAStudio/CentralIAStudio.exe' -ArgumentList '--no-browser','--data-dir','work/smoke-data' -PassThru
+          try {
+            $ready = $false
+            for ($i=0; $i -lt 20; $i++) {
+              try {
+                $r = Invoke-RestMethod 'http://127.0.0.1:8765/api/bootstrap'
+                if ($r.version -eq '0.1.0') { $ready = $true; break }
+              } catch { Start-Sleep -Seconds 1 }
+            }
+            if (!$ready) { throw 'Executavel empacotado nao iniciou' }
+            $page = Invoke-WebRequest 'http://127.0.0.1:8765/'
+            if (!$page.Content.Contains('Central IA Studio')) { throw 'Frontend ausente' }
+          } finally {
+            if (!$process.HasExited) { Stop-Process -Id $process.Id }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Central-IA-Studio-Windows-x64
+          path: |
+            Central-IA-Studio-Windows-x64.zip
+            central-ia-studio-source.zip

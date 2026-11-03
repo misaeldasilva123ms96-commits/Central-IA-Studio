@@ -1,0 +1,3 @@
+# Preserve verbatim upstream notices, including whitespace in quoted license text.
+THIRD_PARTY_FRONTEND.txt -whitespace
+THIRD_PARTY_PYTHON.txt -whitespace
