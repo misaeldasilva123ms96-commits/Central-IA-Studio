@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Central IA Studio · Sua IA, seu controle</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true"><span>✳</span></div>
+      <div><strong>Central IA <em>Studio</em></strong><small>LOCAL AI WORKSPACE</small></div>
+    </div>
+    <button id="newChat" class="new-chat"><span class="plus">＋</span> Nova conversa <span class="shortcut">N</span></button>
+    <nav class="nav" aria-label="Seções">
+      <button class="nav-link active" data-view="chat"><span>◫</span> Conversas <span class="nav-arrow">›</span></button>
+      <button class="nav-link" data-view="models"><span>◈</span> Modelos e motor <span class="nav-arrow">›</span></button>
+      <button class="nav-link" data-view="settings"><span>⚙</span> Configurações <span class="nav-arrow">›</span></button>
+    </nav>
+    <div class="sidebar-heading"><span>HISTÓRICO LOCAL</span><span class="count" id="chatCount">0</span></div>
+    <div class="session-list" id="sessionList"></div>
+    <div class="sidebar-bottom">
+      <div class="privacy"><span class="privacy-dot"></span><div><b>100% local</b><small>Conversas salvas no seu navegador</small></div></div>
+      <div class="sidebar-actions"><button id="exportChat" title="Exportar conversa atual">⇩ Exportar</button><button id="clearHistory" title="Excluir todas as conversas">Limpar</button></div>
+      <div class="version">CENTRAL IA STUDIO <span>V0.1.0</span></div>
+    </div>
+  </aside>
+
+  <div class="workspace">
+    <header class="topbar">
+      <button class="mobile-menu" id="menuBtn" aria-label="Abrir menu">☰</button>
+      <div class="breadcrumbs">WORKSPACE <span>/</span> <strong id="sectionTitle">CONVERSAS</strong></div>
+      <div class="top-actions"><span class="connection-dot" id="connectionDot"></span><span id="connectionLabel">Verificando motor</span><button id="refreshStatus" class="icon-button" title="Atualizar status">↻</button></div>
+    </header>
+
+    <section id="view-chat" class="view chat-view active">
+      <div class="chat-heading"><div class="eyebrow"><span class="inline-dot"></span> AMBIENTE DE INTELIGÊNCIA LOCAL</div><h1 id="conversationTitle">Sua IA. Suas regras.</h1><p>Converse com seus modelos, ajuste cada detalhe e mantenha o controle.</p></div>
+      <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
+      <div id="welcome" class="welcome">
+        <div class="welcome-mark">✳</div>
+        <h2>O que vamos criar hoje?</h2>
+        <p>Seu espaço para conversar, programar e experimentar com IA local. Nenhuma conta necessária.</p>
+        <div class="prompt-grid">
+          <button data-prompt="Crie um plano de desenvolvimento para um aplicativo em Python, com arquitetura limpa e testes."><span>⌘</span><b>Desenvolver</b><small>Planejar um projeto de código</small></button>
+          <button data-prompt="Explique como configurar modelos GGUF em um computador com pouca memória RAM."><span>◈</span><b>Modelos GGUF</b><small>Entender e otimizar modelos</small></button>
+          <button data-prompt="Ajude a revisar um script Python para melhorar desempenho, segurança e qualidade."><span>✺</span><b>Revisar código</b><small>Identificar melhorias e erros</small></button>
+          <button data-prompt="Mostre um exemplo didático de como temperatura, top-p e limite de tokens mudam uma resposta."><span>☷</span><b>Experimentar</b><small>Comparar parâmetros de IA</small></button>
+        </div>
+      </div>
+      <div class="composer-wrap"><div class="composer">
+        <textarea id="promptInput" rows="2" placeholder="Envie uma mensagem ao seu modelo local... (Enter envia, Shift+Enter quebra linha)" aria-label="Sua mensagem"></textarea>
+        <div class="composer-toolbar"><span><span class="mini-light">✦</span> <span id="composerModel">Nenhum modelo conectado</span></span><div><span class="keyboard-note">Enter ↵</span><button id="sendButton" class="send-button" title="Enviar mensagem">↑</button><button id="stopButton" class="stop-button hidden" title="Interromper geração">■</button></div></div>
+      </div><div class="composer-note">Os modelos são executados no seu computador ou em um motor local configurado por você.</div></div>
+    </section>
+
+    <section id="view-models" class="view scroll-view">
+      <div class="page-intro"><div class="eyebrow">GERENCIAMENTO LOCAL</div><h1>Modelos & motor</h1><p>Conecte o KoboldCpp existente ou controle um llama-server diretamente.</p></div>
+      <div class="dashboard-grid"><div class="stat-card"><small>STATUS DO MOTOR</small><strong id="dashboardStatus">Desconectado</strong><p id="dashboardEndpoint">—</p></div><div class="stat-card"><small>MODELO ATIVO</small><strong id="dashboardModel">—</strong><p>Detectado pela API local</p></div><div class="stat-card"><small>MODO DE EXECUÇÃO</small><strong id="dashboardMode">—</strong><p>Dados locais, sem nuvem</p></div></div>
+      <div class="panel"><div class="panel-header"><div><h2>Motor de inferência</h2><p>O Studio pode conectar a um motor já aberto ou iniciar llama.cpp.</p></div><button id="reloadModels" class="secondary-button">↻ Atualizar</button></div><div class="engine-actions"><button id="startEngine" class="primary-button">▶ Iniciar llama-server</button><button id="stopEngine" class="secondary-button">■ Parar motor gerenciado</button><button id="openSettings" class="text-button">Configurar motor ↗</button></div><div class="helper-box">Para usar o <b>KoboldCpp</b>, abra o aplicativo normalmente e selecione <b>KoboldCpp (conectar)</b> nas configurações. O Studio se conecta à API sem alterar seu executável.</div></div>
+      <div class="panel"><div class="panel-header"><div><h2>Biblioteca de modelos GGUF</h2><p>Arquivos encontrados na pasta configurada. Nenhum arquivo é modificado.</p></div><span class="pill" id="modelCount">0 modelos</span></div><div id="modelList" class="model-list"><p class="muted">Configure a pasta de modelos para começar.</p></div></div>
+      <details class="panel log-panel"><summary>Logs do motor gerenciado</summary><pre id="engineLogs">Nenhum log disponível.</pre><button class="secondary-button" id="readLogs">Atualizar logs</button></details>
+    </section>
+
+    <section id="view-settings" class="view scroll-view">
+      <div class="page-intro"><div class="eyebrow">PERSONALIZE SEU AMBIENTE</div><h1>Configurações</h1><p>Parâmetros avançados em português, sem o limite fixo de 2.048 tokens do campo da interface anterior.</p></div>
+      <form id="settingsForm">
+        <div class="panel"><div class="panel-header"><div><h2>Conexão com o motor</h2><p>Escolha como o Studio vai conversar com a IA.</p></div><span class="pill">LOCAL ONLY</span></div><div class="form-grid"><label>Tipo de motor<select name="provider"><option value="koboldcpp">KoboldCpp — conectar ao existente</option><option value="llama-external">llama.cpp — conectar ao existente</option><option value="llama-managed">llama.cpp — iniciar pelo Studio</option></select></label><label>Endereço da API (somente localhost)<input name="api_base_url" placeholder="http://127.0.0.1:5001/v1"></label><label>ID do modelo na API (opcional)<input name="model_id" placeholder="Deixe vazio para o padrão local"></label></div></div>
+        <div class="panel"><div class="panel-header"><div><h2>Motor gerenciado</h2><p>Necessário apenas se for iniciar um llama-server pelo Studio.</p></div></div><div class="form-grid"><label class="full">Executável llama-server<input name="engine_executable" placeholder="C:\\llama.cpp\\llama-server.exe ou /usr/local/bin/llama-server"></label><label class="full">Pasta dos modelos GGUF<input name="models_dir" placeholder="D:\\Modelos ou /home/usuario/modelos"></label><label class="full">Caminho do modelo GGUF a carregar<input name="model_file" placeholder="D:\\Modelos\\modelo.gguf"></label><label>Porta do motor gerenciado<input type="number" name="engine_port" min="1024" max="65535"></label><label>Janela de contexto<input type="number" name="ctx_size" min="512" max="131072"></label><label>Threads de CPU<input type="number" name="threads" min="1" max="128"></label><label>Camadas GPU<input type="number" name="gpu_layers" min="0" max="1000"></label></div><p class="hint">No PC com 8 GB de RAM, comece com 4.096 de contexto e 0 camadas de GPU. A disponibilidade real depende do modelo e da RAM.</p></div>
+        <div class="panel"><div class="panel-header"><div><h2>Geração e amostragem</h2><p>Mais controle sobre velocidade, criatividade e tamanho da resposta.</p></div></div><div class="form-grid"><label>Máximo de tokens de saída<input type="number" name="max_tokens" min="1" max="65536"><small>Permite mais de 2.048, mas respeita a capacidade real do modelo e do contexto.</small></label><label>Temperatura (0 a 2)<input type="number" name="temperature" min="0" max="2" step="0.05"></label><label>Top P<input type="number" name="top_p" min="0.01" max="1" step="0.01"></label><label>Top K<input type="number" name="top_k" min="0" max="1000" step="1"></label><label>Min P<input type="number" name="min_p" min="0" max="1" step="0.01"></label><label>Penalidade de repetição<input type="number" name="repeat_penalty" min="0.5" max="2" step="0.01"></label><label class="full">Instruções do sistema<textarea name="system_prompt" rows="3"></textarea></label></div><p class="hint">Alguns motores podem ignorar parâmetros que não suportam. Aumentar o limite de saída não garante que o modelo gere mais texto.</p></div>
+        <div class="settings-footer"><span id="saveStatus" role="status">Alterações são armazenadas somente neste computador.</span><button type="submit" class="primary-button">Salvar configurações</button></div>
+      </form>
+    </section>
+  </div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
