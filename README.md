@@ -1,14 +1,14 @@
 # Central IA Studio
 
-Prévia funcional 0.1.0 de um gerenciador leve de IA local em português brasileiro.
+Prévia funcional 0.2.0 de um gerenciador leve de IA local em português brasileiro.
 Interface React compilada, API Python, SQLite e adaptador HTTP/CLI para KoboldCpp.
 Sem Electron, Docker, Node.js em produção, telemetria ou downloads automáticos.
 
 ## Executar o pacote Windows pronto
 
-Baixe `Central-IA-Studio-Windows-x64.zip` em [Lançamentos](https://github.com/misaeldasilva123ms96-commits/Central-IA-Studio/releases), extraia **todo o conteúdo** em uma pasta gravável e abra `INICIAR_CENTRAL_IA_STUDIO.cmd`. Não é necessário instalar Python ou Node.js nesse pacote. Na versão com Central Engine, o motor CPU é incluído e detectado automaticamente. Os modelos GGUF continuam externos. O lançamento antigo v0.1.0 ainda exige motor externo.
+Baixe `Central-IA-Studio-Windows-x64.zip` em [Lançamentos](https://github.com/misaeldasilva123ms96-commits/Central-IA-Studio/releases), extraia **todo o conteúdo** em uma pasta gravável e abra `CentralIAStudio\CentralIAStudio.exe` por duplo clique (ou use `INICIAR_CENTRAL_IA_STUDIO.cmd`). Mantenha as subpastas `_internal` e `engine` junto ao EXE. Não é necessário instalar Python ou Node.js nesse pacote. Na versão v0.2.0, o motor CPU é incluído e detectado automaticamente. Os modelos GGUF continuam externos. O lançamento antigo v0.1.0 ainda exige motor externo.
 
-A versão 0.1.0 é uma prévia: o executável passou no runner Windows, mas a inferência com seus modelos e o desempenho no notebook continuam pendentes.
+A versão 0.2.0 é uma prévia: o executável passou no runner Windows, mas a inferência com seus modelos e o desempenho no notebook continuam pendentes.
 
 ## Executar a entrega de fontes no Windows
 

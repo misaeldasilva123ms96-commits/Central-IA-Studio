@@ -107,7 +107,7 @@ def create_app(data_dir=None):
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.1.0'}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.2.0'}
 
     @app.put('/api/settings')
     def settings(value: Settings):

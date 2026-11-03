@@ -1,6 +1,6 @@
 # Changelog
 
-## Em desenvolvimento — Central Engine
+## 0.2.0 — Central Engine incluído
 
 Motor C++ CPU próprio sobre llama.cpp MIT, sem dependência de KoboldCpp.
 CLI validada, diagnóstico, contagem real com template, streaming e cancelamento.
