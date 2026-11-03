@@ -29,7 +29,9 @@ jobs:
         run: ./scripts/build_windows.ps1
       - shell: pwsh
         run: |
-          $process = Start-Process 'dist/CentralIAStudio/CentralIAStudio.exe' -ArgumentList '--no-browser','--data-dir','work/smoke-data' -PassThru
+          Expand-Archive 'Central-IA-Studio-Windows-x64.zip' 'work/package smoke'
+          $exe = Join-Path $PWD 'work/package smoke/CentralIAStudio/CentralIAStudio.exe'
+          $process = Start-Process $exe -ArgumentList '--no-browser' -PassThru
           try {
             $ready = $false
             for ($i=0; $i -lt 20; $i++) {
@@ -41,6 +43,9 @@ jobs:
             if (!$ready) { throw 'Executavel empacotado nao iniciou' }
             $page = Invoke-WebRequest 'http://127.0.0.1:8765/'
             if (!$page.Content.Contains('Central IA Studio')) { throw 'Frontend ausente' }
+            Invoke-WebRequest 'http://127.0.0.1:8765/api/source' -OutFile 'work/bundled-source.zip'
+            python -c "from zipfile import ZipFile; z=ZipFile('work/bundled-source.zip'); assert z.testzip() is None; assert 'backend/app.py' in z.namelist()"
+            if ($LASTEXITCODE -ne 0) { throw 'Fontes correspondentes ausentes' }
           } finally {
             if (!$process.HasExited) { Stop-Process -Id $process.Id }
           }
@@ -50,3 +55,4 @@ jobs:
           path: |
             Central-IA-Studio-Windows-x64.zip
             central-ia-studio-source.zip
+            SHA256SUMS.txt

@@ -1,6 +1,13 @@
 # Instalação Windows 11 x64
 
-## Pacote entregue agora: fontes com frontend compilado
+## Pacote Windows pronto
+
+Em Lançamentos, baixe Central-IA-Studio-Windows-x64.zip e extraia tudo. Abra
+INICIAR_CENTRAL_IA_STUDIO.cmd. Esse pacote inclui o runtime Python; não execute
+PREPARAR_WINDOWS.cmd para ele. Confira os hashes em SHA256SUMS.txt. O runner
+Windows valida inicialização HTTP; inferência no notebook ainda precisa ser testada.
+
+## Alternativa: fontes com frontend compilado
 
 Extraia em pasta gravável (sugestão: `D:\Dev\Projetos\Central_IA_Studio`).
 Requer Python 3.12 x64. Execute PREPARAR_WINDOWS.cmd, confirme o download de
@@ -22,7 +29,7 @@ Recomendação inicial não medida: modelos pequenos quantizados (1,5–3B), con
 GPU layers 0. Um 7B pode pressionar 8 GB de RAM. Não há bloqueio por estimativa.
 Não há garantia para famílias apenas pelo nome; veja metadados e erros do motor.
 
-## Pacote portátil autossuficiente: build preparado, não executado aqui
+## Pacote portátil autossuficiente: build validado em CI
 
 No GitHub, após revisar e enviar os arquivos, execute manualmente o workflow
 “Validar e empacotar Windows x64”. Ele usa Windows 2022, Python 3.12 x64 e Node 22,
@@ -30,7 +37,7 @@ instala versões fixadas, compila frontend, testa, empacota com PyInstaller oned
 valida inicialização HTTP do EXE e anexa o ZIP à execução. Não publica releases.
 É pipeline repetível com versões fixadas de pacotes diretos e lock npm; ainda não
 é build binário determinístico bit a bit, pois runner/Python patch/transitivos pip
-podem variar. Nenhum runner foi acionado nesta sessão.
+podem variar. A primeira validação Windows passou no build 41644240036; consulte Actions para os builds posteriores.
 
 Para build local em máquina de desenvolvimento Windows:
 

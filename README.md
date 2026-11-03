@@ -4,6 +4,12 @@ Prévia funcional 0.1.0 de um gerenciador leve de IA local em português brasile
 Interface React compilada, API Python, SQLite e adaptador HTTP/CLI para KoboldCpp.
 Sem Electron, Docker, Node.js em produção, telemetria ou downloads automáticos.
 
+## Executar o pacote Windows pronto
+
+Baixe `Central-IA-Studio-Windows-x64.zip` em [Lançamentos](https://github.com/misaeldasilva123ms96-commits/Central-IA-Studio/releases), extraia **todo o conteúdo** em uma pasta gravável e abra `INICIAR_CENTRAL_IA_STUDIO.cmd`. Não é necessário instalar Python ou Node.js nesse pacote. O motor KoboldCpp e os modelos GGUF são fornecidos separadamente por você.
+
+A versão 0.1.0 é uma prévia: o executável passou no runner Windows, mas a inferência com seus modelos e o desempenho no notebook continuam pendentes.
+
 ## Executar a entrega de fontes no Windows
 
 1. Extraia o ZIP em uma pasta gravável. Instale Python **3.12 x64** se necessário.
@@ -17,7 +23,7 @@ Sem Electron, Docker, Node.js em produção, telemetria ou downloads automático
 O frontend já vem compilado. Não é necessário npm no computador de uso.
 O ZIP de fontes **não é um executável Windows autossuficiente**. O workflow manual
 `.github/workflows/windows.yml` prepara esse pacote em runner Windows, sem publicar release.
-Não foi acionado nesta sessão. Consulte [instalação](docs/INSTALACAO_WINDOWS.md).
+O CI valida o pacote Windows em cada PR, sem publicar automaticamente. Consulte [instalação](docs/INSTALACAO_WINDOWS.md).
 
 ## Funcionalidades entregues
 
