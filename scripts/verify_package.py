@@ -19,7 +19,7 @@ def verify(path, required):
 
 if __name__ == '__main__':
     packages = [
-        ('Central-IA-Studio-Windows-x64.zip', {'CentralIAStudio/CentralIAStudio.exe', 'INICIAR_CENTRAL_IA_STUDIO.cmd', 'central-ia-studio-source.zip', 'LICENSE', 'NOTICES.md', 'THIRD_PARTY_FRONTEND.txt', 'THIRD_PARTY_PYTHON.txt'}),
+        ('Central-IA-Studio-Windows-x64.zip', {'CentralIAStudio/CentralIAStudio.exe', 'CentralIAStudio/engine/central-engine-nocuda.exe', 'CentralIAStudio/engine/llama-cpp-source.zip', 'CentralIAStudio/engine/central-engine-source.zip', 'CentralIAStudio/engine/third-party-licenses.zip', 'INICIAR_CENTRAL_IA_STUDIO.cmd', 'central-ia-studio-source.zip', 'LICENSE', 'NOTICES.md', 'THIRD_PARTY_FRONTEND.txt', 'THIRD_PARTY_PYTHON.txt'}),
         ('central-ia-studio-source.zip', {'backend/app.py', 'frontend/dist/index.html', 'README.md', 'LICENSE'}),
     ]
     lines = [verify(ROOT/name, required)+'  '+name for name, required in packages]

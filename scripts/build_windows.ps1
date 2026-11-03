@@ -6,6 +6,8 @@ if ($LASTEXITCODE -ne 0) { throw 'PyInstaller falhou' }
 $packageDir = Join-Path 'work' ('windows-package-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $packageDir | Out-Null
 Copy-Item -Recurse -Force 'dist/CentralIAStudio' $packageDir
+if (!(Test-Path 'work/engine-package/central-engine-nocuda.exe')) { throw 'Compile e empacote o Central Engine antes do Studio' }
+Copy-Item -Recurse -Force 'work/engine-package' (Join-Path $packageDir 'CentralIAStudio/engine')
 Copy-Item INICIAR_CENTRAL_IA_STUDIO.cmd, README.md, LICENSE, NOTICES.md, THIRD_PARTY_FRONTEND.txt, THIRD_PARTY_PYTHON.txt $packageDir
 Copy-Item -Recurse -Force docs $packageDir
 Copy-Item central-ia-studio-source.zip $packageDir

@@ -27,3 +27,12 @@ Para fornecer o código correspondente: mantenha o arquivo
 central-ia-studio-source.zip ao lado da aplicação; o pacote Windows o inclui
 no servidor em /api/source e na raiz do pacote. Modificações devem atualizar esse
 arquivo e preservar LICENSE e avisos conforme a licença aplicável.
+
+## Central Engine (novo componente)
+
+A partir da integração do Central Engine, o pacote Windows inclui nosso executável
+CPU construído sobre llama.cpp MIT, com avisos, fontes upstream e patches na pasta
+CentralIAStudio/engine. As fontes do aplicativo continuam sem binários. A CLI e as
+rotas do motor são código novo sob MIT (engine/NOTICE.md); o motor é separado do
+aplicativo AGPL e usa HTTP local. O KoboldCpp continua sendo alternativa externa.
+As descrições anteriores sobre ausência de motor referem-se à entrega 0.1.0.

@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 import httpx
-from .domain import build_command, thinking_value
+from .domain import build_command, thinking_value, bundled_engine
 
 class Engine:
     def __init__(self, store):
@@ -19,6 +19,8 @@ class Engine:
         self.log_handle = None
         self.request_key = None
         self.cancelled = False
+        self.kind = "koboldcpp"
+        self.abort_event = asyncio.Event()
         self.generation_lock = asyncio.Lock()
         self.lifecycle_lock = asyncio.Lock()
 
@@ -46,7 +48,8 @@ class Engine:
                 for r in responses:
                     r.raise_for_status()
                 caps, model, ctx = [r.json() for r in responses]
-            result.update(connected=True,capabilities=caps,model=model.get('result'),context=ctx.get('value'))
+            self.kind = 'central' if caps.get('result') == 'CentralEngine' else 'koboldcpp'
+            result.update(connected=True,kind=self.kind,capabilities=caps,model=model.get('result'),context=ctx.get('value'))
         except (httpx.HTTPError,ValueError,KeyError) as e:
             result['error'] = 'Motor indisponível: '+str(e)
         return result
@@ -58,7 +61,7 @@ class Engine:
         if urlsplit(self.url).hostname == '::1':
             raise ValueError('Para iniciar o motor gerenciado, use 127.0.0.1 na conexão')
         port = urlsplit(self.url).port
-        cmd = build_command(settings.get('executable',''), model, profile, port)
+        cmd = build_command(settings.get('executable','') or bundled_engine(), model, profile, port)
         with socket.socket() as probe:
             if os.name == 'nt':
                 probe.setsockopt(socket.SOL_SOCKET,socket.SO_EXCLUSIVEADDRUSE,1)
@@ -99,12 +102,15 @@ class Engine:
         if not self.request_key:
             return {'interrupted':False}
         self.cancelled = True
+        if self.kind == 'central':
+            self.abort_event.set()
+            return {'interrupted':True,'method':'disconnect'}
         return await self.json('/api/extra/abort',{'genkey':self.request_key})
 
     async def prepare(self, messages, profile):
         status = await self.status()
         if not status['connected'] or not status.get('context'):
-            raise ValueError('Conecte um KoboldCpp com modelo carregado antes de gerar')
+            raise ValueError('Conecte um motor com modelo carregado antes de gerar')
         payload = {'messages':messages,'temperature':profile.temperature,'top_p':profile.top_p,
                    'top_k':profile.top_k,'min_p':profile.min_p,'rep_pen':profile.repetition_penalty,
                    'stream':True,'stream_options':{'include_usage':True}}
@@ -114,6 +120,8 @@ class Engine:
                 raise ValueError('Thinking explícito exige KoboldCpp iniciado com Jinja. O template também precisa aceitar enable_thinking.')
             payload['chat_template_kwargs'] = {'enable_thinking':thinking == 'on'}
             payload['reasoning_effort'] = 'none' if thinking == 'off' else 'high'
+        if self.kind == 'central':
+            payload['repeat_penalty'] = payload.pop('rep_pen')
         tokens = await self.json('/api/extra/tokencount',payload)
         occupied = tokens.get('value',-1)
         if not isinstance(occupied,int) or occupied < 0:
@@ -121,6 +129,7 @@ class Engine:
         context = min(int(status['context']),profile.context)
         # KoboldCpp reserva 20%/35% da janela para entrada (generate / calculate_min_remain_hardlimit).
         reserve = max(min(context-4,16),int(context*(.2 if occupied < context*.25 else .35)))
+        reserve = 0 if self.kind == 'central' else reserve
         effective = min(profile.max_output,context-occupied-8,context-reserve)
         if effective < 1:
             raise ValueError('Contexto esgotado. Reduza o histórico ou reinicie com contexto maior.')
@@ -131,7 +140,7 @@ class Engine:
                          'warning':'Template deve aceitar enable_thinking; efeito requer validação real.' if thinking != 'default' else None,
                          'model':status.get('model')}
 
-    async def stream(self, payload):
+    async def _read_stream(self, payload):
         async with self.client() as client:
             async with client.stream('POST','/v1/chat/completions',json=payload) as response:
                 response.raise_for_status()
@@ -147,3 +156,28 @@ class Engine:
                         yield json.loads(raw)
                 if data and '\n'.join(data) != '[DONE]':
                     yield json.loads('\n'.join(data))
+
+    async def stream(self, payload):
+        if self.kind != 'central':
+            async for chunk in self._read_stream(payload):
+                yield chunk
+            return
+        iterator = self._read_stream(payload).__aiter__()
+        cancelled = asyncio.create_task(self.abort_event.wait())
+        pending = None
+        try:
+            while True:
+                pending = asyncio.create_task(anext(iterator))
+                done, _ = await asyncio.wait([pending,cancelled],return_when=asyncio.FIRST_COMPLETED)
+                if cancelled in done:
+                    break
+                try:
+                    yield pending.result()
+                except StopAsyncIteration:
+                    break
+        finally:
+            cancelled.cancel()
+            if pending is not None:
+                pending.cancel()
+            await asyncio.gather(cancelled,*([pending] if pending is not None else []),return_exceptions=True)
+            await iterator.aclose()
