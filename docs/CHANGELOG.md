@@ -1,5 +1,13 @@
 # Changelog
 
+## Em desenvolvimento — Central Engine
+
+Motor C++ CPU próprio sobre llama.cpp MIT, sem dependência de KoboldCpp.
+CLI validada, diagnóstico, contagem real com template, streaming e cancelamento.
+Integração e descoberta automática no Studio, fontes/licenças no pacote e build
+Windows com teste nativo usando pesos aleatórios, sem baixar modelos treinados.
+
+
 ## 0.1.0 — 2026-11-03
 
 Primeira implementação de Central IA Studio: frontend pt-BR compilado,

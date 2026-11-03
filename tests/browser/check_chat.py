@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory() as directory:
             page.on('pageerror',lambda e:errors.append(str(e)))
             page.goto('http://127.0.0.1:8767/')
             page.get_by_role('button',name='Configurar conexão',exact=True).click()
-            page.get_by_text('Endereço do KoboldCpp',exact=True).locator('..').locator('input').fill(url)
+            page.get_by_text('Endereço do motor',exact=True).locator('..').locator('input').fill(url)
             page.get_by_role('button',name='Salvar conexão',exact=True).click()
             page.get_by_role('alert').filter(has_text='Configuração salva').wait_for()
             page.get_by_role('button',name='Parâmetros',exact=True).click()

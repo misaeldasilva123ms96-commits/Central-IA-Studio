@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ConfigDict, ValidationError
-from .domain import Profile, Settings, RESTART_FIELDS
+from .domain import Profile, Settings, RESTART_FIELDS, bundled_engine
 from .engine import Engine
 from .gguf import discover
 from .storage import Store
@@ -94,7 +94,7 @@ def create_app(data_dir=None):
     @app.exception_handler(httpx.HTTPError)
     async def backend_error(request, error):
         logger.warning('Falha de comunicação: %s',type(error).__name__)
-        return JSONResponse({'detail':'Falha de comunicação com KoboldCpp: '+str(error)},status_code=502)
+        return JSONResponse({'detail':'Falha de comunicação com o motor: '+str(error)},status_code=502)
 
     @app.get('/api/bootstrap')
     def bootstrap():
@@ -105,6 +105,8 @@ def create_app(data_dir=None):
         except ValidationError:
             settings = Settings().model_dump()
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
+        if not settings['executable']:
+            settings['executable'] = bundled_engine()
         return {'token':token,'settings':settings,'profile':Profile().model_dump(),'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.1.0'}
 
     @app.put('/api/settings')
@@ -231,6 +233,7 @@ def create_app(data_dir=None):
             limits['estimated_seconds'] = limits['effective_output'] / (sum(rates)/len(rates)) if rates else None
             payload['genkey'] = uuid.uuid4().hex
             engine.request_key, engine.cancelled = payload['genkey'], False
+            engine.abort_event.clear()
             if value.action == 'send':
                 store.add_message(value.conversation,'user',value.content)
             if removed:

@@ -275,3 +275,60 @@ def test_corresponding_source_access(client):
         assert archive.testzip() is None
         assert 'backend/app.py' in archive.namelist()
         assert not any(n.startswith(('data/','work/')) or n.endswith(('.exe','.gguf')) for n in archive.namelist())
+
+
+def test_central_cpu_launch_constraints(tmp_path):
+    exe=tmp_path/'central-engine-nocuda.exe';exe.write_bytes(b'not executed')
+    model=gguf(tmp_path/'model.gguf')
+    assert '--gpulayers' in build_command(str(exe),str(model),Profile(),5001)
+    for values in [{'gpu_layers':1},{'batch_size':-1},{'cache_kv':'q8_0','flash_attention':False}]:
+        with pytest.raises(ValueError):build_command(str(exe),str(model),Profile(**values),5001)
+
+
+def test_central_protocol_sampler_and_context(client,fake_engine):
+    engine=client.app.state.engine
+    original=engine.status
+    async def central_status():
+        result=await original()
+        engine.kind='central'
+        result['capabilities']['result']='CentralEngine'
+        result['kind']='central'
+        return result
+    engine.status=central_status
+    cid=client.post('/api/conversations',json={}).json()['id']
+    r=client.post('/api/generate',json={'conversation':cid,'content':'Oi','profile':Profile(context=8192,max_output=7500).model_dump()})
+    assert r.status_code==200
+    payload=fake_engine[1].payloads[-1][1]
+    assert payload['max_tokens']==7500  # no KoboldCpp 20/35% reserve on Central
+    assert payload['repeat_penalty']==1.1 and 'rep_pen' not in payload
+
+
+def test_central_cancel_while_waiting_for_headers(tmp_path):
+    from backend.engine import Engine
+    async def check():
+        engine=Engine(Store(tmp_path));engine.kind='central';engine.request_key='test'
+        closed=asyncio.Event()
+        async def stalled(payload):
+            try:
+                await asyncio.Event().wait()
+                yield {}
+            finally:
+                closed.set()
+        engine._read_stream=stalled
+        async def consume():return [chunk async for chunk in engine.stream({})]
+        task=asyncio.create_task(consume())
+        await asyncio.sleep(.01)
+        result=await engine.abort()
+        assert result=={'interrupted':True,'method':'disconnect'}
+        assert await asyncio.wait_for(task,1)==[]
+        assert closed.is_set()
+    asyncio.run(check())
+
+
+def test_source_packaging_excludes_uppercase_models_and_binaries(tmp_path,monkeypatch):
+    from scripts import package_source
+    (tmp_path/'user.GGUF').write_bytes(b'private model')
+    (tmp_path/'engine.EXE').write_bytes(b'binary')
+    (tmp_path/'app.py').write_text('print("source")')
+    monkeypatch.setattr(package_source,'ROOT',tmp_path)
+    assert [str(rel) for _,rel in package_source.source_files()]==['app.py']

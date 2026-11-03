@@ -9,7 +9,7 @@ def source_files():
     paths=[]
     for p in sorted(ROOT.rglob('*')):
         rel=p.relative_to(ROOT)
-        if p.name == 'SHA256SUMS.txt' or not p.is_file() or set(rel.parts)&EXCLUDED or rel.parts[0]=='dist' or p.suffix in ['.exe','.gguf','.zip','.pyc','.spec']:
+        if p.name == 'SHA256SUMS.txt' or not p.is_file() or set(rel.parts)&EXCLUDED or rel.parts[0]=='dist' or p.suffix.lower() in ['.exe','.gguf','.zip','.pyc','.spec']:
             continue
         paths.append((p,rel))
     return paths

@@ -6,7 +6,7 @@ Sem Electron, Docker, Node.js em produção, telemetria ou downloads automático
 
 ## Executar o pacote Windows pronto
 
-Baixe `Central-IA-Studio-Windows-x64.zip` em [Lançamentos](https://github.com/misaeldasilva123ms96-commits/Central-IA-Studio/releases), extraia **todo o conteúdo** em uma pasta gravável e abra `INICIAR_CENTRAL_IA_STUDIO.cmd`. Não é necessário instalar Python ou Node.js nesse pacote. O motor KoboldCpp e os modelos GGUF são fornecidos separadamente por você.
+Baixe `Central-IA-Studio-Windows-x64.zip` em [Lançamentos](https://github.com/misaeldasilva123ms96-commits/Central-IA-Studio/releases), extraia **todo o conteúdo** em uma pasta gravável e abra `INICIAR_CENTRAL_IA_STUDIO.cmd`. Não é necessário instalar Python ou Node.js nesse pacote. Na versão com Central Engine, o motor CPU é incluído e detectado automaticamente. Os modelos GGUF continuam externos. O lançamento antigo v0.1.0 ainda exige motor externo.
 
 A versão 0.1.0 é uma prévia: o executável passou no runner Windows, mas a inferência com seus modelos e o desempenho no notebook continuam pendentes.
 
@@ -15,7 +15,7 @@ A versão 0.1.0 é uma prévia: o executável passou no runner Windows, mas a in
 1. Extraia o ZIP em uma pasta gravável. Instale Python **3.12 x64** se necessário.
 2. Execute `PREPARAR_WINDOWS.cmd` uma vez e autorize nele o download de dependências.
 3. Abra `INICIAR_CENTRAL_IA_STUDIO.cmd`. O navegador abrirá em `http://127.0.0.1:8765`.
-4. Em **Configurações**, informe a URL do KoboldCpp ou o caminho do executável confiável que você já possui.
+4. Em **Configurações**, confira o Central Engine detectado no pacote, ou indique um KoboldCpp externo.
 5. Em **Modelos**, adicione sua pasta (sugestão: `D:\MODELO LOCAL`), selecione um GGUF,
    ajuste o perfil e clique **Iniciar**. Se outro modelo estiver ativo, pare o motor gerenciado primeiro.
 6. Converse. Para interromper, use o botão do chat. Para sair, feche o gerenciador com Ctrl+C na janela do console.
@@ -65,3 +65,12 @@ Veja [resultados de testes](docs/RESULTADO_TESTES.md), [pendências](docs/PENDEN
 e [engenharia reversa](docs/ENGENHARIA_REVERSA.md).
 
 Licença AGPL-3.0-or-later. Consulte LICENSE, NOTICES.md e docs/LICENCAS_E_ORIGENS.md.
+
+## Central Engine — motor próprio sobre llama.cpp
+
+O desenvolvimento atual inclui `engine/`, nosso motor C++ de inferência CPU,
+sem dependência de KoboldCpp. A inferência usa llama.cpp MIT com revisão fixada,
+créditos preservados e fontes correspondentes incluídas. Não reivindicamos a criação
+dos kernels de inferência. Consulte [motor](engine/README.md) e
+[integração](docs/CENTRAL_ENGINE.md). O pacote validado no CI inclui o motor;
+a release v0.1.0 antiga não é alterada retroativamente.
