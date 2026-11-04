@@ -306,6 +306,6 @@ def test_projectors_are_identified_and_cannot_start_as_text_models(client,tmp_pa
     assert model['projector'] is True
     response=client.post('/api/engine/start',json={'path':str(file),'profile':Profile().model_dump()})
     assert response.status_code==400 and 'projetor' in response.text
-    executable=tmp_path/'central-engine-nocuda';executable.write_bytes(b'fixture')
+    executable=tmp_path/('central-engine-nocuda.exe' if sys.platform=='win32' else 'central-engine-nocuda');executable.write_bytes(b'fixture')
     command=build_command(executable,file,Profile(projector=str(file)),5001)
     assert command[command.index('--mmproj')+1]==str(file.resolve())
