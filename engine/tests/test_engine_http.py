@@ -22,7 +22,7 @@ from backend.storage import Store
 
 binary=Path(sys.argv[1]).resolve();model=Path(sys.argv[2]).resolve()
 assert 'CentralEngine' in subprocess.check_output([binary,'--version'],text=True)
-for args in [['--host','0.0.0.0'],['--hf-repo','unwanted/repo'],['--tools','all'],['--gpulayers','1']]:
+for args in [['--host','0.0.0.0'],['--hf-repo','unwanted/repo'],['--tools','all'],['--gpulayers','1'],['--prompt-cache-mib','-1'],['--prompt-cache-mib','8193']]:
     assert subprocess.run([binary,*args],capture_output=True).returncode == 2
 with tempfile.TemporaryDirectory() as directory:
     local_model=Path(directory)/'modelo de teste ç.GGUF'
@@ -57,6 +57,22 @@ with tempfile.TemporaryDirectory() as directory:
             _,on_limits=await engine.prepare([{'role':'user','content':'Teste'}],profile.model_copy(update={'thinking':'on'}))
             _,off_limits=await engine.prepare([{'role':'user','content':'Teste'}],profile.model_copy(update={'thinking':'off'}))
             assert on_limits['occupied_context'] > off_limits['occupied_context']
+            # Repeated prompts must reuse real KV tokens; disabling bypasses reuse.
+            cache_payload,_=await engine.prepare([{'role':'user','content':'cache de contexto '*30}],profile)
+            cache_payload.update(max_tokens=3,temperature=0,logit_bias={'101':100,'2':-100,'0':-100})
+            assert cache_payload['cache_prompt'] is True
+            for _ in range(2):
+                cached_chunks=[c async for c in engine.stream(cache_payload)]
+            cached_usage=next(c['usage'] for c in cached_chunks if c.get('usage'))
+            assert cached_usage['prompt_tokens_details']['cached_tokens']>0,cached_usage
+            cache_payload['cache_prompt']=False
+            uncached=[c async for c in engine.stream(cache_payload)]
+            uncached_usage=next(c['usage'] for c in uncached if c.get('usage'))
+            assert uncached_usage['prompt_tokens_details']['cached_tokens']==0,uncached_usage
+            async with engine.client() as native_client:
+                overflow=await native_client.post('/v1/chat/completions',json={'messages':[{'role':'user','content':'Teste '*5000}],'max_tokens':1,'stream':False})
+                assert overflow.status_code==400,overflow.text
+            print(json.dumps({'prompt_cache_reused_tokens':cached_usage['prompt_tokens_details']['cached_tokens'],'cache_disabled_tokens':0,'context_overflow_rejected':True}))
             payload,limits=await engine.prepare([{'role':'user','content':'Teste'}],profile)
             assert payload['repeat_penalty']==profile.repetition_penalty
             assert 'rep_pen' not in payload

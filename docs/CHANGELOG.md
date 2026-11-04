@@ -1,6 +1,19 @@
 # Changelog
 
-## 0.2.1 — em validação
+## 0.3.0 — em desenvolvimento
+
+Chat com histórico lateral pesquisável, balões, compositor expansível, código com
+cores e ajustes em painel recolhível. Renomear/excluir conversas, confirmação de
+exclusão e temas claro/escuro. Seletor de diretórios locais mantendo a entrada por
+texto; pastas podem ser cadastradas sem parar um motor em uso.
+
+Central Engine 0.2.0: teto de cache adicional de prompts configurável (256 MiB
+por padrão), controle de reutilização por requisição e contagem de tokens
+reutilizados. Context shift desativado, estados de carregamento/erro explícitos
+e perfis antigos completados com novos campos sem alterar os valores salvos.
+
+
+## 0.2.1 — lançado
 
 Balão do usuário imediato, restauração do rascunho em erro, cabeçalho compacto
 e layout preso ao viewport com rolagem interna. Conversa preservada ao trocar

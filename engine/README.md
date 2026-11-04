@@ -1,4 +1,4 @@
-# Central Engine 0.1.0 — CPU / sem CUDA
+# Central Engine 0.2.0 — CPU / sem CUDA
 
 Motor de inferência do Central IA Studio, implementado em C++ sobre llama.cpp MIT,
 com CLI própria, políticas locais e compatibilidade com o gerenciador Central.
@@ -29,6 +29,25 @@ Por padrão: porta 5001, contexto 4096, 2 threads, lote 128, KV q8_0, Flash Atte
 Sem FA, use KV f16 ou bf16. Cache KV e arquitetura ainda dependem do modelo.
 O Studio pode usar o arquivo `.jinja` indicado por perfil. Geração e contagem usam
 o mesmo template do servidor. Thinking depende do template, nunca só do nome do modelo.
+
+## Cache e limites de memória (0.2.0)
+
+O cache de prefixos no slot já existia no llama.cpp e permanece habilitado. O Studio
+agora permite desligá-lo por requisição (`prompt_cache`, apenas Central Engine),
+e mostra os tokens efetivamente reutilizados em Detalhes da geração quando a API
+os informa. Não se promete uma taxa de tokens/s: o benefício depende do prefixo
+compartilhado e do modelo.
+
+O teto padrão para snapshots **adicionais** de prompts em RAM foi reduzido de
+8192 MiB (padrão upstream) para 256 MiB. Ajuste com `--prompt-cache-mib N`, de 0 a
+8192, ou com Cache adicional em RAM no perfil do Studio, seguido de reinício.
+Zero desativa snapshots extras, sem desligar a memória KV do contexto ou remover
+o reaproveitamento do prefixo do slot. Esse teto não limita a RAM total do motor:
+pesos do modelo, contexto KV e buffers continuam consumindo memória separadamente.
+
+O motor agora inicia com `--no-context-shift`: solicitações maiores que a janela
+são rejeitadas, em vez de descartar silenciosamente partes do contexto por shifting.
+O Studio já conta o prompt e calcula o espaço de saída antes de gerar.
 
 ## Diferenças intencionais em relação ao KoboldCpp
 

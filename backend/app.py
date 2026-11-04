@@ -20,6 +20,7 @@ from .domain import Profile, Settings, RESTART_FIELDS, bundled_engine
 from .engine import Engine
 from .gguf import discover
 from .storage import Store
+from .folders import browse_folders
 from .generation_stats import DEFAULT_SYSTEM_PROMPT,backend_timings,estimate_seconds
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -108,15 +109,25 @@ def create_app(data_dir=None):
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.2.1'}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.3.0'}
 
     @app.put('/api/settings')
     def settings(value: Settings):
-        if engine.generation_lock.locked() or (engine.process and engine.process.poll() is None):
+        try:
+            previous = Settings(**store.get('settings',{}))
+        except ValidationError:
+            previous = None
+        connection_changed = (previous is None or previous.engine_url != value.engine_url or
+                              (previous.executable or bundled_engine()) != (value.executable or bundled_engine()))
+        if connection_changed and (engine.generation_lock.locked() or (engine.process and engine.process.poll() is None)):
             raise ValueError('Pare a geração e o motor gerenciado antes de alterar a conexão')
         store.put('settings',value.model_dump())
         logger.info('Configuração salva')
         return value.model_dump()
+
+    @app.get('/api/folders')
+    def folders(path: str = ''):
+        return browse_folders(path)
 
     @app.get('/api/models')
     def models():
@@ -124,7 +135,7 @@ def create_app(data_dir=None):
 
     @app.get('/api/profiles')
     def profiles(model: str = 'default'):
-        return store.profile(model) or Profile().model_dump()
+        return Profile(**(store.profile(model) or {})).model_dump()
 
     @app.put('/api/profiles')
     def save_profile(value: Profile, model: str = 'default'):
@@ -183,6 +194,26 @@ def create_app(data_dir=None):
     def get_conversation(cid: str):
         ensure_conversation(cid)
         return store.messages(cid)
+
+    @app.patch('/api/conversations/{cid}')
+    def rename_conversation(cid: str, value: ConversationInput):
+        ensure_conversation(cid)
+        title = value.title.strip()
+        if not title:
+            raise ValueError('O título não pode ficar vazio')
+        with store.db() as db:
+            db.execute('UPDATE conversations SET title=? WHERE id=?',(title,cid))
+        return {'saved':True}
+
+    @app.delete('/api/conversations/{cid}')
+    def delete_conversation(cid: str):
+        if engine.generation_lock.locked():
+            raise ValueError('Aguarde a geração antes de excluir uma conversa')
+        ensure_conversation(cid)
+        with store.db() as db:
+            db.execute('DELETE FROM conversations WHERE id=?',(cid,))
+            db.execute('DELETE FROM settings WHERE key=?',('system:'+cid,))
+        return {'deleted':True}
 
     @app.patch('/api/messages/{mid}')
     def edit(mid: int, value: EditInput):
