@@ -19,8 +19,22 @@ def verify(path, required):
 
 if __name__ == '__main__':
     packages = [
-        ('Central-IA-Studio-Windows-x64.zip', {'CentralIAStudio/CentralIAStudio.exe', 'CentralIAStudio/engine/central-engine-nocuda.exe', 'CentralIAStudio/engine/llama-cpp-source.zip', 'CentralIAStudio/engine/central-engine-source.zip', 'CentralIAStudio/engine/third-party-licenses.zip', 'INICIAR_CENTRAL_IA_STUDIO.cmd', 'central-ia-studio-source.zip', 'LICENSE', 'NOTICES.md', 'THIRD_PARTY_FRONTEND.txt', 'THIRD_PARTY_PYTHON.txt'}),
-        ('central-ia-studio-source.zip', {'backend/app.py', 'frontend/dist/index.html', 'README.md', 'LICENSE'}),
+        ('Central-IA-Studio-Windows-x64.zip', {
+            'ABRIR_CENTRAL_IA.cmd', 'LEIA-ME.txt',
+            'CentralIAStudio/CentralIAStudio.exe',
+            'CentralIAStudio/_internal/central-ia-studio-source.zip',
+            'CentralIAStudio/engine/central-engine-nocuda.exe',
+            'CentralIAStudio/engine/LICENSE', 'CentralIAStudio/engine/NOTICE.md',
+            'CentralIAStudio/engine/third-party-licenses.zip',
+            'CentralIAStudio/licencas/LICENSE', 'CentralIAStudio/licencas/NOTICES.md',
+            'CentralIAStudio/licencas/THIRD_PARTY_FRONTEND.txt',
+            'CentralIAStudio/licencas/THIRD_PARTY_PYTHON.txt'}),
+        ('Central-IA-Studio-Fontes-e-Documentacao.zip', {
+            'LEIA-ME.txt', 'Fontes/central-ia-studio-source.zip',
+            'Fontes/Motor/llama-cpp-source.zip', 'Fontes/Motor/central-engine-source.zip',
+            'Fontes/Motor/third-party-licenses.zip', 'Fontes/Motor/LICENSE',
+            'Documentacao/README.md', 'Documentacao/docs/ATUALIZACAO_0_3_0.md',
+            'Licencas/LICENSE', 'Licencas/THIRD_PARTY_FRONTEND.txt', 'Licencas/THIRD_PARTY_PYTHON.txt'}),
     ]
     lines = [verify(ROOT/name, required)+'  '+name for name, required in packages]
     (ROOT/'SHA256SUMS.txt').write_text('\n'.join(lines)+'\n')

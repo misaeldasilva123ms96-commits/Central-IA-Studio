@@ -1,4 +1,4 @@
-# Central IA Studio 0.3.0 — atualização em desenvolvimento
+# Central IA Studio 0.3.0 — atualização
 
 ## Contrato desta entrega
 
@@ -101,7 +101,7 @@ ciclo de QA, incluindo desktop na resolução nativa do conceito (1586×992):
 A estrutura visual foi verificada contra o conceito, com os desvios explícitos
 acima. Prévia: [capturas e conceito](previews/v0.3.0/README.md). Os ZIPs Windows,
 seus hashes e o smoke test do EXE são verificados pelo workflow da PR antes da
-entrega do pacote. Nenhum merge ou lançamento automático faz parte desta atualização.
+entrega do pacote. A publicação é separada e foi autorizada após a revisão do usuário.
 
 A revisão da PR também identificou um diálogo de histórico oculto ao renomear ou
 excluir pela sidebar estando em outro módulo. Os diálogos agora são portados para
@@ -110,3 +110,17 @@ de Modelos e garante que Ctrl+Shift+O não troque a conversa com um diálogo abe
 O build reutilizável do motor só é aceito após conclusão com sucesso, igualdade
 da árvore engine e verificação dos SHA-256; o teste nativo é repetido mesmo ao
 reutilizar o binário, seguido de novo empacotamento e smoke test do Studio EXE.
+
+## Organização do lançamento
+
+O ZIP Windows agora abre com apenas ABRIR_CENTRAL_IA.cmd, LEIA-ME.txt e a pasta
+CentralIAStudio. O congelamento PyInstaller é copiado integralmente: `_internal`,
+frontend, dependências e fontes offline são preservados. `engine` contém o binário
+e licenças de execução; avisos do app ficam em `licencas`.
+
+O ZIP Fontes e Documentação reúne as fontes completas do Studio e motor, revisão
+upstream, avisos e todos os guias/prévias. Nenhum desses materiais foi removido da
+entrega; apenas não são duplicados na pasta inicial do aplicativo. O teste de
+empacotamento compara os bytes dos recursos e ZIPs de fontes entre entrada e saída.
+O smoke test Windows repete inferência, persistência, seletor de pasta e download
+de fontes do executável extraído, sem depender do ZIP técnico.

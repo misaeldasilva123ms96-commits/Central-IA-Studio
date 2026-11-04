@@ -4,15 +4,20 @@
 
 Em Lançamentos, baixe Central-IA-Studio-Windows-x64.zip e extraia tudo. Abra
 CentralIAStudio\CentralIAStudio.exe por duplo clique, ou use
-INICIAR_CENTRAL_IA_STUDIO.cmd. Extraia todo o ZIP e mantenha as pastas _internal
-e engine ao lado do EXE. Não copie apenas o arquivo EXE para outra pasta.
+ABRIR_CENTRAL_IA.cmd. Extraia todo o ZIP e mantenha as pastas _internal,
+engine e licencas ao lado do EXE. Não copie apenas o arquivo EXE para outra pasta.
 Esse pacote inclui o runtime Python e o Central Engine; não execute
 PREPARAR_WINDOWS.cmd para ele. Confira os hashes em SHA256SUMS.txt. O runner
-Windows valida inicialização HTTP; inferência no notebook ainda precisa ser testada.
+Windows valida o EXE iniciando o motor incluído, SSE e persistência. Qualidade e
+desempenho dos modelos treinados no notebook precisam ser medidos nele.
+
+O ZIP Central-IA-Studio-Fontes-e-Documentacao.zip é opcional: reúne fontes completas
+do Studio e motor, guias e prévias. O código-fonte do Studio também permanece
+acessível offline em Configurações na interface.
 
 ## Alternativa: fontes com frontend compilado
 
-Extraia em pasta gravável (sugestão: `D:\Dev\Projetos\Central_IA_Studio`).
+No ZIP técnico, extraia Fontes/central-ia-studio-source.zip em pasta gravável (sugestão: `D:\Dev\Projetos\Central_IA_Studio`).
 Requer Python 3.12 x64. Execute PREPARAR_WINDOWS.cmd, confirme o download de
 dependências e aguarde. Esse passo é explícito, não ocorre durante o uso normal.
 Depois abra INICIAR_CENTRAL_IA_STUDIO.cmd por duplo clique. Não precisa Node.js,
@@ -52,13 +57,14 @@ npm ci --prefix frontend
 npm run build --prefix frontend
 python -m pytest -q
 python scripts/package_source.py
+# Antes de empacotar: compile o motor e gere work/engine-package conforme engine/README.md.
 ./scripts/build_windows.ps1
 ```
 
-No pacote compilado, basta extrair e abrir INICIAR_CENTRAL_IA_STUDIO.cmd.
+No pacote compilado, basta extrair e abrir ABRIR_CENTRAL_IA.cmd.
 O runtime Python e as bibliotecas estarão na pasta CentralIAStudio; preserve sua
-estrutura. Modelo e motor permanecem externos. Este caminho precisa ser validado
-em Windows antes de declarar o critério de duplo clique aprovado.
+estrutura. O motor CPU está incluído, e os modelos GGUF permanecem externos.
+Esse fluxo é validado no runner Windows em cada build da PR.
 
 ## Dados e encerramento
 

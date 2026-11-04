@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — em desenvolvimento
+## 0.3.0 — Chat, motor e distribuição organizados
 
 Chat com histórico lateral pesquisável, balões, compositor expansível, código com
 cores e ajustes em painel recolhível. Renomear/excluir conversas, confirmação de
@@ -12,6 +12,10 @@ por padrão), controle de reutilização por requisição e contagem de tokens
 reutilizados. Context shift desativado, estados de carregamento/erro explícitos
 e perfis antigos completados com novos campos sem alterar os valores salvos.
 
+
+Distribuição separada em aplicativo Windows e fontes/documentação completas.
+Pasta inicial com iniciador e guia curto; runtime, motor, licenças e acesso offline
+às fontes preservados. ZIPs validados, sem modelos ou dados pessoais incluídos.
 
 ## 0.2.1 — lançado
 

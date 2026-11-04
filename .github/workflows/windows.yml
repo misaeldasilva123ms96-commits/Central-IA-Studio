@@ -79,6 +79,9 @@ jobs:
       - shell: pwsh
         run: |
           Expand-Archive 'Central-IA-Studio-Windows-x64.zip' 'work/package smoke'
+          $packageRoot = Join-Path $PWD 'work/package smoke'
+          $packageTop = @(Get-ChildItem $packageRoot -Name)
+          if ($packageTop.Count -ne 3 -or !(Test-Path (Join-Path $packageRoot 'ABRIR_CENTRAL_IA.cmd')) -or !(Test-Path (Join-Path $packageRoot 'LEIA-ME.txt'))) { throw 'Pasta inicial do pacote deve conter apenas iniciador, guia e CentralIAStudio' }
           $expectedVersion = (Get-Content 'frontend/package.json' -Raw | ConvertFrom-Json).version
           $exe = Join-Path $PWD 'work/package smoke/CentralIAStudio/CentralIAStudio.exe'
           $process = Start-Process $exe -ArgumentList '--no-browser' -PassThru
@@ -100,6 +103,8 @@ jobs:
             New-Item -ItemType Directory -Force $releaseModelDir | Out-Null
             $releaseModelPath = Join-Path $releaseModelDir 'tiny.gguf'
             Copy-Item 'work/tiny.gguf' $releaseModelPath
+            $folderListing = Invoke-RestMethod ('http://127.0.0.1:8765/api/folders?path=' + [uri]::EscapeDataString($releaseModelDir))
+            if ($folderListing.path -ne [IO.Path]::GetFullPath($releaseModelDir)) { throw 'Seletor de pastas do EXE empacotado falhou' }
             $releaseSettings = @{engine_url='http://127.0.0.1:5001'; executable=$r.settings.executable; folders=@($releaseModelDir)}
             Invoke-RestMethod 'http://127.0.0.1:8765/api/settings' -Method Put -Headers $releaseHeaders -ContentType 'application/json' -Body ($releaseSettings | ConvertTo-Json) | Out-Null
             $releaseProfile = $r.profile
@@ -122,7 +127,7 @@ jobs:
             Write-Host 'Studio EXE -> Central Engine incluido -> GGUF aleatorio -> SSE -> SQLite: passou.'
 
             Invoke-WebRequest 'http://127.0.0.1:8765/api/source' -OutFile 'work/bundled-source.zip'
-            python -c "from zipfile import ZipFile; z=ZipFile('work/bundled-source.zip'); assert z.testzip() is None; assert 'backend/app.py' in z.namelist()"
+            python -c "from zipfile import ZipFile; z=ZipFile('work/bundled-source.zip'); assert z.testzip() is None; assert 'backend/app.py' in z.namelist(); assert 'scripts/package_windows.py' in z.namelist()"
             if ($LASTEXITCODE -ne 0) { throw 'Fontes correspondentes ausentes' }
           } finally {
             if ($releaseEnginePid) { Stop-Process -Id $releaseEnginePid -ErrorAction SilentlyContinue }
@@ -133,7 +138,7 @@ jobs:
           name: Central-IA-Studio-Windows-x64
           path: |
             Central-IA-Studio-Windows-x64.zip
-            central-ia-studio-source.zip
+            Central-IA-Studio-Fontes-e-Documentacao.zip
             SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:

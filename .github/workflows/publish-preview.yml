@@ -54,6 +54,6 @@ jobs:
           PY
       - name: Anexar e publicar previa
         run: |
-          gh release upload "$RELEASE_TAG" assets/Central-IA-Studio-Windows-x64.zip assets/central-ia-studio-source.zip assets/SHA256SUMS.txt --clobber
+          gh release upload "$RELEASE_TAG" assets/Central-IA-Studio-Windows-x64.zip assets/Central-IA-Studio-Fontes-e-Documentacao.zip assets/SHA256SUMS.txt --clobber
           test "$(gh release view "$RELEASE_TAG" --json assets --jq '.assets | length')" = 3
           gh release edit "$RELEASE_TAG" --draft=false --prerelease
