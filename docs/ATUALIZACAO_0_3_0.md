@@ -102,3 +102,11 @@ A estrutura visual foi verificada contra o conceito, com os desvios explícitos
 acima. Prévia: [capturas e conceito](previews/v0.3.0/README.md). Os ZIPs Windows,
 seus hashes e o smoke test do EXE são verificados pelo workflow da PR antes da
 entrega do pacote. Nenhum merge ou lançamento automático faz parte desta atualização.
+
+A revisão da PR também identificou um diálogo de histórico oculto ao renomear ou
+excluir pela sidebar estando em outro módulo. Os diálogos agora são portados para
+o body, fora do contêiner oculto do chat. O teste cobre renomear/excluir a partir
+de Modelos e garante que Ctrl+Shift+O não troque a conversa com um diálogo aberto.
+O build reutilizável do motor só é aceito após conclusão com sucesso, igualdade
+da árvore engine e verificação dos SHA-256; o teste nativo é repetido mesmo ao
+reutilizar o binário, seguido de novo empacotamento e smoke test do Studio EXE.
