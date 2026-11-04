@@ -103,6 +103,7 @@ async def check(port):
         assert '<svg' not in copied['text/html'] and '<button' not in copied['text/html']
         assert '```python\n'+code.rstrip() in copied['text/plain']
         assert unlabelled.rstrip() in copied['text/plain']
+        assert 'A\tB\n1\t2\n' in copied['text/plain']
         assert 'palavra svg' in copied['text/plain']  # do not strip legitimate text
         await page.evaluate("""()=>{const t=document.querySelector('.message.assistant pre code').firstChild;const start=t.textContent.indexOf('    return');const end=t.textContent.indexOf('\\n',start);const r=document.createRange();r.setStart(t,start);r.setEnd(t,end);const s=getSelection();s.removeAllRanges();s.addRange(r);}""")
         await page.keyboard.press('Control+c')
