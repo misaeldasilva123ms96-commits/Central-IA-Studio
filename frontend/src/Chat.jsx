@@ -24,7 +24,7 @@ export default function Chat({engine,profile,notify,onConfigure,onModels,onNavig
  useEffect(()=>{const area=messageArea.current;if(active&&area&&follow.current)area.scrollTop=area.scrollHeight;},[live,messages,active]);
  useEffect(()=>{const el=composer.current;if(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,140)+'px';}},[text]);
  const newConversation=()=>{if(sending.current)return;setCid('');setMessages([]);setText('');setSystem(defaultSystemPrompt);setLimits(null);follow.current=true;onNavigate?.();composer.current?.focus();};
- useEffect(()=>{const shortcut=e=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='o'){e.preventDefault();newConversation();}};window.addEventListener('keydown',shortcut);return()=>window.removeEventListener('keydown',shortcut);},[busy,defaultSystemPrompt]);
+ useEffect(()=>{const shortcut=e=>{if(document.querySelector('dialog[open]'))return;if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='o'){e.preventDefault();newConversation();}};window.addEventListener('keydown',shortcut);return()=>window.removeEventListener('keydown',shortcut);},[busy,defaultSystemPrompt]);
  const create=async()=>{const c=await api('/conversations',{title:(text||'Nova conversa').slice(0,60)});created.current=c.id;setCid(c.id);await refresh();return c.id;};
  const run=async(action='send')=>{
    if(sending.current||historyLoading||historyError||(action==='send'&&!text.trim()))return;
