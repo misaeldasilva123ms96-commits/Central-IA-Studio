@@ -1,18 +1,37 @@
 # Central IA Studio
 
-Prévia funcional 0.2.0 de um gerenciador leve de IA local em português brasileiro.
-Interface React compilada, API Python, SQLite e adaptador HTTP/CLI para KoboldCpp.
+Central IA Studio 0.3.0: aplicativo de IA local em português brasileiro.
+Interface React compilada, API Python, SQLite, Central Engine CPU incluído e
+compatibilidade com KoboldCpp externo.
 Sem Electron, Docker, Node.js em produção, telemetria ou downloads automáticos.
 
 ## Executar o pacote Windows pronto
 
-Baixe `Central-IA-Studio-Windows-x64.zip` em [Lançamentos](https://github.com/misaeldasilva123ms96-commits/Central-IA-Studio/releases), extraia **todo o conteúdo** em uma pasta gravável e abra `CentralIAStudio\CentralIAStudio.exe` por duplo clique (ou use `INICIAR_CENTRAL_IA_STUDIO.cmd`). Mantenha as subpastas `_internal` e `engine` junto ao EXE. Não é necessário instalar Python ou Node.js nesse pacote. Na versão v0.2.0, o motor CPU é incluído e detectado automaticamente. Os modelos GGUF continuam externos. O lançamento antigo v0.1.0 ainda exige motor externo.
+Em [Lançamentos](https://github.com/misaeldasilva123ms96-commits/Central-IA-Studio/releases), escolha:
 
-A versão 0.2.0 é uma prévia: o executável passou no runner Windows, mas a inferência com seus modelos e o desempenho no notebook continuam pendentes.
+| Arquivo | Para que serve |
+| --- | --- |
+| **Central-IA-Studio-Windows-x64.zip** | Aplicativo pronto com motor. É o único ZIP necessário para usar. |
+| **Central-IA-Studio-Fontes-e-Documentacao.zip** | Fontes completas do Studio e motor, guias e prévias. Opcional para desenvolvimento/consulta. |
+| **SHA256SUMS.txt** | Hashes para conferir os dois downloads. |
+
+Extraia **todo o ZIP Windows** em uma pasta gravável e abra **ABRIR_CENTRAL_IA.cmd**
+ou `CentralIAStudio\CentralIAStudio.exe`. A pasta inicial contém apenas o iniciador,
+`LEIA-ME.txt` e a pasta `CentralIAStudio`. Mantenha `_internal`, `engine` e `licencas`
+junto ao EXE. Não é necessário instalar Python, Node.js ou KoboldCpp. Os GGUF
+continuam separados, nas pastas escolhidas pelo usuário.
+
+Fontes do Studio seguem disponíveis offline em **Configurações → Código-fonte**.
+O ZIP técnico reúne também a revisão completa do llama.cpp, as adaptações do motor
+e toda a documentação. Não precisa copiar seu conteúdo para a instalação.
+
+Para atualizar, feche a versão anterior e faça backup da pasta `data`. Extraia em
+pasta nova e copie `data` para junto do novo EXE se quiser preservar histórico e
+configurações. O desempenho com modelos treinados depende do modelo e do hardware.
 
 ## Executar a entrega de fontes no Windows
 
-1. Extraia o ZIP em uma pasta gravável. Instale Python **3.12 x64** se necessário.
+1. No ZIP técnico, extraia também `Fontes/central-ia-studio-source.zip` em uma pasta gravável. Instale Python **3.12 x64** se necessário.
 2. Execute `PREPARAR_WINDOWS.cmd` uma vez e autorize nele o download de dependências.
 3. Abra `INICIAR_CENTRAL_IA_STUDIO.cmd`. O navegador abrirá em `http://127.0.0.1:8765`.
 4. Em **Configurações**, confira o Central Engine detectado no pacote, ou indique um KoboldCpp externo.
@@ -75,7 +94,7 @@ dos kernels de inferência. Consulte [motor](engine/README.md) e
 [integração](docs/CENTRAL_ENGINE.md). O pacote validado no CI inclui o motor;
 a release v0.1.0 antiga não é alterada retroativamente.
 
-## Atualização 0.3.0 em desenvolvimento
+## Atualização 0.3.0
 
 A interface passa a priorizar a conversa, com histórico lateral pesquisável,
 renomeação e exclusão com confirmação. Os ajustes da sessão ficam no botão
@@ -87,4 +106,4 @@ pode continuar digitando o caminho completo. Não há upload nem cópia dos GGUF
 Os parâmetros completos incluem controles do cache do Central Engine 0.2.0.
 Consulte [a documentação do motor](engine/README.md) e
 [o relatório da atualização](docs/ATUALIZACAO_0_3_0.md). As releases anteriores
-continuam disponíveis; este código não representa um lançamento publicado.
+continuam disponíveis. A publicação só ocorre após validar os pacotes da versão.
