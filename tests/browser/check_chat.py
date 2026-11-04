@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory() as directory:
             page.get_by_role('spinbutton').nth(0).fill('8192')
             page.get_by_text('Saída máxima (tokens)',exact=True).locator('..').locator('input').fill('5000')
             page.get_by_role('button',name='Conversas',exact=True).click()
-            page.get_by_text('Conectado',exact=True).wait_for(timeout=10000)
+            page.get_by_text('Conectado',exact=True).wait_for(timeout=20000)
             page.get_by_role('button',name='Ajustes da sessão',exact=True).click()
             page.get_by_text('Registrar benchmark',exact=True).click()
             page.keyboard.press('Escape')

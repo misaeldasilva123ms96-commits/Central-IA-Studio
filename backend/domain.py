@@ -21,6 +21,7 @@ class Profile(BaseModel):
     flash_attention: bool = True
     prompt_cache: bool = True
     cache_ram_mib: int = Field(256, ge=0, le=8192)
+    projector: str = ''
     template: str = ''
     thinking: str = 'default'
     mode: str = 'personalizado'
@@ -75,7 +76,7 @@ class Settings(BaseModel):
     def dirs(cls, values):
         return list(dict.fromkeys(str(Path(v).expanduser().resolve()) for v in values if v.strip()))
 
-RESTART_FIELDS = ['context','threads','blas_threads','batch_size','gpu_layers','cache_kv','flash_attention','template','cache_ram_mib']
+RESTART_FIELDS = ['context','threads','blas_threads','batch_size','gpu_layers','cache_kv','flash_attention','template','cache_ram_mib','projector']
 
 def thinking_value(p):
     return 'off' if p.mode == 'rapido' else 'on' if p.mode == 'profundo' else p.thinking
@@ -107,6 +108,13 @@ def build_command(executable, model, profile, port):
             '--jinja']
     if exe.stem == 'central-engine-nocuda':
         args += ['--prompt-cache-mib', str(p.cache_ram_mib)]
+    if p.projector:
+        if exe.stem != 'central-engine-nocuda':
+            raise ValueError('Projetor multimodal gerenciado requer Central Engine.')
+        projector=Path(p.projector).expanduser().resolve()
+        if not projector.is_file() or projector.suffix.lower()!='.gguf':
+            raise ValueError('Selecione um projetor mmproj GGUF local existente e compatível com o modelo.')
+        args += ['--mmproj',str(projector)]
     if not p.flash_attention:
         args.append('--noflashattention')
     if p.template:

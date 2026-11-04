@@ -10,6 +10,8 @@ import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
+from typing import Literal
+from urllib.parse import quote
 import httpx
 import psutil
 from fastapi import FastAPI, HTTPException, Request
@@ -22,11 +24,16 @@ from .gguf import discover
 from .storage import Store
 from .folders import browse_folders
 from .generation_stats import DEFAULT_SYSTEM_PROMPT,backend_timings,estimate_seconds
+from .attachments import MAX_FILE,extract,public_attachment,model_message
+from .agent_tools import ApprovalBroker,definitions
+from .turns import configure_messages,run_turn
+from .revisions import undo_revision
 
 ROOT = Path(__file__).resolve().parent.parent
 
 class ConversationInput(BaseModel):
     title: str = Field('Nova conversa',min_length=1,max_length=200)
+    kind: Literal['chat','agent'] = 'chat'
 
 class GenerateInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -36,10 +43,22 @@ class GenerateInput(BaseModel):
     profile: Profile = Field(default_factory=Profile)
     action: str = 'send'
     benchmark: bool = False
+    attachments: list[str] = Field(default_factory=list,max_length=6)
+    kind: Literal['chat','agent'] = 'chat'
+    agent_mode: Literal['build','plan'] = 'build'
+    access: Literal['ask','auto','full'] = 'ask'
+    internet: bool = False
+    workspace: str = Field('',max_length=4096)
 
 class StartInput(BaseModel):
     path: str
     profile: Profile
+
+class UndoInput(BaseModel):
+    confirmed: Literal[True]
+
+class ApprovalInput(BaseModel):
+    allow: bool
 
 class EditInput(BaseModel):
     content: str = Field(max_length=200000)
@@ -48,6 +67,8 @@ class EditInput(BaseModel):
 def create_app(data_dir=None):
     store = Store(data_dir or os.environ.get('CENTRAL_DATA_DIR') or ROOT/'data')
     engine = Engine(store)
+    approvals = ApprovalBroker()
+    uploads = asyncio.Semaphore(2)
     token = secrets.token_urlsafe(32)
     logger = logging.getLogger('central.'+uuid.uuid4().hex)
     logger.setLevel(logging.INFO)
@@ -65,7 +86,7 @@ def create_app(data_dir=None):
         logger.removeHandler(handler)
 
     app = FastAPI(title='Central IA Studio',lifespan=lifespan,docs_url=None,redoc_url=None)
-    app.state.store, app.state.engine = store, engine
+    app.state.store, app.state.engine, app.state.approvals = store, engine, approvals
 
     @app.middleware('http')
     async def local_security(request, call_next):
@@ -109,7 +130,7 @@ def create_app(data_dir=None):
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.3.0'}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.4.0'}
 
     @app.put('/api/settings')
     def settings(value: Settings):
@@ -133,6 +154,45 @@ def create_app(data_dir=None):
     def models():
         return discover(Settings(**store.get('settings',{})).folders)
 
+    @app.post('/api/attachments')
+    async def upload_attachment(request: Request, name: str):
+        async with uploads:
+            data=bytearray()
+            async for chunk in request.stream():
+                data.extend(chunk)
+                if len(data)>MAX_FILE:raise HTTPException(413,'Cada arquivo pode ter até 8 MiB.')
+            item=await asyncio.to_thread(extract,name,bytes(data))
+            with store.db() as db:
+                db.execute('DELETE FROM attachments WHERE created<? AND id NOT IN (SELECT attachment_id FROM message_attachments)',(time.time()-86400,))
+                db.execute('INSERT INTO attachments(id,name,mime,kind,size,text,data,vision,warning,sha256,created) VALUES (?,?,?,?,?,?,?,?,?,?,?)',tuple(item[k] for k in ['id','name','mime','kind','size','text','data','vision','warning','sha256','created']))
+            return public_attachment(item)
+
+    @app.get('/api/attachments/{aid}/content')
+    def attachment_content(aid: str):
+        with store.db() as db:
+            row=db.execute('SELECT * FROM attachments WHERE id=?',(aid,)).fetchone()
+        if row is None:raise HTTPException(404,'Anexo não encontrado')
+        disposition='inline' if row['kind']=='image' else 'attachment'
+        return Response(bytes(row['data']),media_type=row['mime'],headers={'Content-Disposition':disposition+"; filename*=UTF-8''"+quote(row['name'],safe='')})
+
+    @app.delete('/api/attachments/{aid}')
+    def delete_attachment(aid: str):
+        with store.db() as db:
+            if db.execute('SELECT 1 FROM message_attachments WHERE attachment_id=?',(aid,)).fetchone():
+                raise ValueError('Este anexo faz parte do histórico. Exclua a conversa para removê-lo.')
+            db.execute('DELETE FROM attachments WHERE id=?',(aid,))
+        return {'deleted':True}
+
+    @app.post('/api/revisions/{rid}/restore')
+    def restore_revision(rid: str, value: UndoInput):
+        if engine.generation_lock.locked():raise ValueError('Aguarde a tarefa antes de desfazer uma edição.')
+        return undo_revision(store,rid)
+
+    @app.post('/api/approvals/{aid}')
+    def decide_approval(aid: str, value: ApprovalInput):
+        approvals.decide(aid,value.allow)
+        return {'received':True}
+
     @app.get('/api/profiles')
     def profiles(model: str = 'default'):
         return Profile(**(store.profile(model) or {})).model_dump()
@@ -152,6 +212,7 @@ def create_app(data_dir=None):
             raise ValueError('Interrompa a geração antes de iniciar o motor')
         library = discover(Settings(**store.get('settings',{})).folders)['models']
         matching = next((m for m in library if m['path'] == str(Path(value.path).resolve())),None)
+        if matching and matching.get('projector'):raise ValueError('Este GGUF é um projetor. Selecione o modelo principal e configure o projetor no perfil.')
         if not matching or not matching.get('metadata'):
             raise ValueError('Escolha um GGUF válido em uma pasta cadastrada')
         async with engine.lifecycle_lock:
@@ -175,15 +236,15 @@ def create_app(data_dir=None):
         return result
 
     @app.get('/api/conversations')
-    def conversations(q: str = ''):
+    def conversations(q: str = '', kind: Literal['chat','agent'] = 'chat'):
         with store.db() as db:
             rows = db.execute('''SELECT DISTINCT c.* FROM conversations c LEFT JOIN messages m ON m.conversation=c.id
-                WHERE c.title LIKE ? OR m.content LIKE ? ORDER BY c.created DESC''',('%'+q+'%','%'+q+'%')).fetchall()
+                WHERE c.kind=? AND (c.title LIKE ? OR m.content LIKE ?) ORDER BY c.created DESC''',(kind,'%'+q+'%','%'+q+'%')).fetchall()
         return [dict(r) for r in rows]
 
     @app.post('/api/conversations')
     def new_conversation(value: ConversationInput):
-        return {'id':store.conversation(value.title)}
+        return {'id':store.conversation(value.title,value.kind)}
 
     def ensure_conversation(cid):
         with store.db() as db:
@@ -211,7 +272,12 @@ def create_app(data_dir=None):
             raise ValueError('Aguarde a geração antes de excluir uma conversa')
         ensure_conversation(cid)
         with store.db() as db:
+            attached=[r[0] for r in db.execute('SELECT attachment_id FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation=?)',(cid,))]
             db.execute('DELETE FROM conversations WHERE id=?',(cid,))
+            for aid in attached:
+                db.execute('DELETE FROM attachments WHERE id=? AND id NOT IN (SELECT attachment_id FROM message_attachments)',(aid,))
+            db.execute('DELETE FROM settings WHERE key=?',('session:'+cid,))
+            db.execute('DELETE FROM agent_revisions WHERE conversation=?',(cid,))
             db.execute('DELETE FROM settings WHERE key=?',('system:'+cid,))
         return {'deleted':True}
 
@@ -230,13 +296,18 @@ def create_app(data_dir=None):
         ensure_conversation(cid)
         messages = store.messages(cid)
         if format == 'md':
-            body = '\n\n'.join('## '+{'user':'Você','assistant':'Assistente','system':'Sistema'}.get(m['role'],m['role'])+'\n\n'+m['content'] for m in messages)
+            body = '\n\n'.join('## '+{'user':'Você','assistant':'Assistente','system':'Sistema'}.get(m['role'],m['role'])+'\n\n'+m['content']+''.join('\n\nAnexo: '+a['name']+' (SHA256 '+a['sha256']+')' for a in m.get('attachments',[])) for m in messages)
             return Response(body,media_type='text/markdown',headers={'Content-Disposition':'attachment; filename="conversa.md"'})
         return Response(json.dumps(messages,ensure_ascii=False,indent=2),media_type='application/json',headers={'Content-Disposition':'attachment; filename="conversa.json"'})
 
     @app.post('/api/generate')
     async def generate(value: GenerateInput, request: Request):
         ensure_conversation(value.conversation)
+        with store.db() as db:
+            saved_kind=db.execute('SELECT kind FROM conversations WHERE id=?',(value.conversation,)).fetchone()[0]
+        if saved_kind!=value.kind:raise ValueError('Esta conversa pertence a outro modo.')
+        if value.kind=='agent' and value.workspace and not Path(value.workspace).expanduser().is_dir():
+            raise ValueError('Escolha uma pasta de projeto existente.')
         if value.action not in ['send','regenerate','continue']:
             raise ValueError('Ação desconhecida')
         if engine.generation_lock.locked():
@@ -251,15 +322,33 @@ def create_app(data_dir=None):
                 removed = history.pop()
             if value.action == 'continue' and (not history or history[-1]['role'] != 'assistant'):
                 raise ValueError('Não há resposta para continuar')
-            messages = [{'role':m['role'],'content':m['content']} for m in history]
+            image_count=sum(a['kind']=='image' for m in history for a in m.get('attachments',[]))
+            if image_count>8:raise ValueError('Esta conversa contém mais de oito imagens. Use uma nova conversa para manter o processamento limitado.')
+            messages = [model_message(store,m) for m in history]
             system = value.system if value.system is not None else store.get('system:'+value.conversation,DEFAULT_SYSTEM_PROMPT)
             if system:
                 messages.insert(0,{'role':'system','content':system})
             if value.action == 'send':
-                if not value.content.strip():
-                    raise ValueError('Escreva uma mensagem')
-                messages.append({'role':'user','content':value.content})
-            payload, limits = await engine.prepare(messages,value.profile)
+                if not value.content.strip() and not value.attachments:
+                    raise ValueError('Escreva uma mensagem ou anexe um arquivo')
+                value.content=value.content or 'Analise os anexos.'
+                selected_attachments=[]
+                for aid in dict.fromkeys(value.attachments):
+                    with store.db() as db:
+                        row=db.execute('SELECT * FROM attachments WHERE id=?',(aid,)).fetchone()
+                    if row is None:raise ValueError('Um anexo não foi encontrado. Envie-o novamente.')
+                    selected_attachments.append(public_attachment(row))
+                if image_count+sum(a['kind']=='image' for a in selected_attachments)>8:
+                    raise ValueError('Esta conversa excederia oito imagens. Use uma nova conversa.')
+                messages.append(model_message(store,{'role':'user','content':value.content,'attachments':selected_attachments}))
+            options={k:getattr(value,k) for k in ['kind','agent_mode','access','internet','workspace']}
+            document_ids=list(dict.fromkeys(a['id'] for m in history for a in m.get('attachments',[]) if a['kind']=='document'))
+            if value.action=='send':document_ids+= [a['id'] for a in selected_attachments if a['kind']=='document' and a['id'] not in document_ids]
+            tool_defs=definitions(value.kind,value.agent_mode,value.workspace,value.internet,bool(document_ids))
+            tool_options=options | {'attachment_ids':document_ids}
+            native_tools=(await engine.status()).get('tools') is True if tool_defs else False
+            messages=configure_messages(messages,tool_defs,native_tools,value.agent_mode if value.kind=='agent' else 'conversa')
+            payload, limits = await engine.prepare(messages,value.profile,tool_defs if native_tools else None)
             with store.db() as db:
                 prior = db.execute("SELECT stats FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 200").fetchall()
             limits['estimated_seconds'],limits['estimate_samples'] = estimate_seconds(
@@ -269,13 +358,14 @@ def create_app(data_dir=None):
             engine.request_key, engine.cancelled = payload['genkey'], False
             engine.abort_event.clear()
             if value.action == 'send':
-                store.add_message(value.conversation,'user',value.content)
+                store.add_message(value.conversation,'user',value.content,attachments=list(dict.fromkeys(value.attachments)))
             if removed:
                 with store.db() as db:
                     # Preserve o resultado anterior em avaliação antes de regenerar.
                     db.execute('INSERT INTO benchmarks VALUES (?,?,?)',(uuid.uuid4().hex,time.time(),json.dumps({'kind':'regenerated_previous','result':removed['content'],'stats':removed['stats']})))
                     db.execute('DELETE FROM messages WHERE id=?',(removed['id'],))
             store.put('system:'+value.conversation,system)
+            store.put('session:'+value.conversation,options)
         except BaseException:
             engine.request_key = None
             engine.generation_lock.release()
@@ -288,10 +378,18 @@ def create_app(data_dir=None):
             start_time, first = time.perf_counter(), None
             content, reasoning, finish, usage = '', '', None, {}
             timings = {}
+            activities = {}
             error = None
             try:
                 yield sse('limits',limits)
-                async for chunk in engine.stream(payload):
+                async for event,chunk in run_turn(engine,store,approvals,value.conversation,messages,value.profile,payload,tool_defs,native_tools,tool_options):
+                    if event=='activity':
+                        activities[chunk['id']]=chunk
+                        yield sse('activity',chunk)
+                        continue
+                    if event=='limits':
+                        yield sse('limits',chunk)
+                        continue
                     if await request.is_disconnected():
                         await engine.abort()
                         finish = 'interrompida'
@@ -333,7 +431,7 @@ def create_app(data_dir=None):
                     'elapsed':elapsed,'ttft':first-start_time if first else None,
                     'tokens_per_second':count/elapsed if count is not None and elapsed else None,
                     'truncated':finish=='length','error':error,'backend_timings':timings,
-                    'engine_kind':engine.kind,'profile':value.profile.model_dump()}
+                    'engine_kind':engine.kind,'profile':value.profile.model_dump(),'activities':list(activities.values()),'session':options}
                 try:
                     store.add_message(value.conversation,'assistant',content,reasoning,stats)
                     if value.benchmark:
@@ -353,7 +451,7 @@ def create_app(data_dir=None):
 
     @app.get('/api/system-prompt/{cid}')
     def system_prompt(cid: str):
-        return {'content':store.get('system:'+cid,DEFAULT_SYSTEM_PROMPT)}
+        return {'content':store.get('system:'+cid,DEFAULT_SYSTEM_PROMPT),'options':store.get('session:'+cid,{})}
 
     @app.get('/api/metrics')
     async def metrics():

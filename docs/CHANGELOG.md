@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — em validação
+
+Anexos por botão +, arrastar/soltar e colar, com originais no banco e extração local
+limitada de documentos. Consulta de trechos/busca em anexos para não colocar todo
+o documento no contexto. Visão por modelo + mmproj, detectada pela capacidade real.
+Interface ajustada à referência aprovada, marca e ações inline, menu de permissões
+sem corte. Modo Agente com Plan/Build, projeto selecionado, aprovação por ação,
+políticas Ask/Auto/Full e desfazer com proteção contra edições posteriores.
+Ferramentas públicas de busca/leitura de internet, fontes e resultados persistidos.
+Central Engine 0.3 com mmproj CPU explícito. Nenhum download automático de modelos.
+
+
 ## 0.3.0 — Chat, motor e distribuição organizados
 
 Chat com histórico lateral pesquisável, balões, compositor expansível, código com

@@ -1,4 +1,4 @@
-# Central Engine 0.2.0 — CPU / sem CUDA
+# Central Engine 0.3.0 — CPU / sem CUDA
 
 Motor de inferência do Central IA Studio, implementado em C++ sobre llama.cpp MIT,
 com CLI própria, políticas locais e compatibilidade com o gerenciador Central.
@@ -51,7 +51,7 @@ O Studio já conta o prompt e calcula o espaço de saída antes de gerar.
 
 ## Diferenças intencionais em relação ao KoboldCpp
 
-Apenas texto/CPU nesta versão. Uma geração simultânea (`--parallel 1`), sem router,
+Texto e imagens por CPU quando um projetor compatível é configurado. Uma geração simultânea (`--parallel 1`), sem router,
 sem downloads, sem interface web upstream, sem ferramentas/MCP e sem configuração
 implícita herdada de arquivos/variáveis LLAMA_ARG_* do llama.cpp. Camadas GPU precisam
 ser zero; lote -1 não é aceito. O contexto não é reduzido automaticamente por autofit.
@@ -93,3 +93,22 @@ python engine/tests/test_engine_http.py CAMINHO_BINARIO work/tiny.gguf
 ```
 
 Os binários de entrega não incluem esse GGUF. Consulte NOTICE.md e as licenças.
+
+## Visão no Central Engine 0.3
+
+Use um GGUF de visão e o arquivo mmproj correspondente, ambos locais. No Studio,
+selecione o modelo principal e depois **Usar projetor** na linha do GGUF identificado
+como clip, ou preencha **Projetor de visão mmproj** nos parâmetros. Salve o perfil
+e reinicie o motor. A capacidade é obtida de `/props.modalities.vision` após carregar;
+não é inferida pelo nome do modelo. O aplicativo recusa imagens se ela não estiver
+ativa. Não se promete compatibilidade entre projetores e modelos diferentes.
+
+CLI: `--mmproj CAMINHO.gguf`, sempre com `--no-mmproj-offload` para manter CPU.
+A contagem de tokens existente usa `process_mtmd_prompt` quando o projetor está
+carregado, incluindo os tokens de imagem reais antes de calcular a saída disponível.
+O transporte usa `image_url` com data URI JPEG, sem enviar o arquivo a outro servidor.
+A versão original do anexo permanece no SQLite do Studio.
+
+Agentes, execução de comandos e ferramentas web pertencem ao gerenciador Python,
+com políticas próprias de aprovação. O binário de inferência não executa chamadas
+de ferramenta nem ganha acesso remoto; continua escutando somente em loopback.

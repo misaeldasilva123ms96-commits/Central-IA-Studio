@@ -29,24 +29,25 @@ static int central_main(int argc, char ** argv) {
         for (int i=1; i<argc; ++i) {
             std::string key = argv[i];
             if (key == "--help" || key == "-h") {
-                std::cout << "Central Engine 0.2.0 - motor local de inferencia CPU\n"
+                std::cout << "Central Engine 0.3.0 - motor local de inferencia CPU\n"
                     "Base: llama.cpp / ggml (MIT). Binario x64 AVX2, sem CUDA.\n"
                     "Uso: central-engine-nocuda --model MODELO.gguf [opcoes]\n"
                     "--port 5001 --contextsize 4096 --threads 2 --blasthreads 2\n"
                     "--blasbatchsize 128 --quantkv f16|bf16|q8_0|q5_1|q4_0\n"
                     "--jinjatemplate ARQUIVO.jinja --noflashattention\n"
+                    "--mmproj PROJETOR.gguf (visao com modelo compativel, CPU)\n"
                     "--prompt-cache-mib 256 (0 desativa snapshots adicionais em RAM)\n"
                     "--host aceita somente 127.0.0.1. --gpulayers aceita somente 0.\n"
                     "Nao baixa modelos nem executa ferramentas. Ctrl+C encerra.\n";
                 return 0;
             }
             if (key == "--version" || key == "--diagnostico") {
-                std::cout << R"({"engine":"CentralEngine","version":"0.2.0","cpu_only":true,"isa":"AVX2","upstream":"llama.cpp","commit":"d1044bc82712fbf08996080bef6298b24a27e9c7"})" << '\n';
+                std::cout << R"({"engine":"CentralEngine","version":"0.3.0","cpu_only":true,"isa":"AVX2","upstream":"llama.cpp","commit":"d1044bc82712fbf08996080bef6298b24a27e9c7"})" << '\n';
                 return 0;
             }
             if (key == "--jinja") continue;
             if (key == "--noflashattention") { flash = false; continue; }
-            if (!p.count(key) && key != "--model" && key != "--jinjatemplate") throw std::invalid_argument("opcao desconhecida: "+key);
+            if (!p.count(key) && key != "--model" && key != "--jinjatemplate" && key != "--mmproj") throw std::invalid_argument("opcao desconhecida: "+key);
             if (++i >= argc) throw std::invalid_argument("valor ausente: "+key);
             p[key] = argv[i];
         }
@@ -72,13 +73,20 @@ static int central_main(int argc, char ** argv) {
             "--cache-ram",p["--prompt-cache-mib"],"--cache-prompt","--no-context-shift",
             "--fit","off","--jinja","--offline","--no-webui","--no-ui-mcp-proxy","--reasoning-format","deepseek",
             "--cors-origins","http://127.0.0.1:0"};
+        if (p.count("--mmproj")) {
+            auto projector = std::filesystem::u8path(p["--mmproj"]);
+            std::string suffix = projector.extension().u8string();
+            std::transform(suffix.begin(),suffix.end(),suffix.begin(),[](unsigned char c){return std::tolower(c);});
+            if (!std::filesystem::is_regular_file(projector) || suffix!=".gguf") throw std::invalid_argument("mmproj deve ser um projetor GGUF local existente");
+            args.insert(args.end(),{"--mmproj",p["--mmproj"],"--no-mmproj-offload"});
+        }
         if (p.count("--jinjatemplate")) {
             auto path = std::filesystem::u8path(p["--jinjatemplate"]);
             if (!std::filesystem::is_regular_file(path) || std::filesystem::file_size(path)>1048576 ||
                 (path.extension()!=".jinja" && path.extension()!=".j2")) throw std::invalid_argument("template deve ser .jinja/.j2 local de ate 1 MiB");
             args.insert(args.end(),{"--chat-template-file",p["--jinjatemplate"]});
         }
-        std::cerr << "Central Engine 0.2.0 | CPU AVX2 | llama.cpp MIT | apenas 127.0.0.1\n";
+        std::cerr << "Central Engine 0.3.0 | CPU AVX2 | llama.cpp MIT | apenas 127.0.0.1\n";
         std::vector<char*> raw;
         for (auto & arg : args) raw.push_back(arg.data());
         return llama_server(static_cast<int>(raw.size()), raw.data());

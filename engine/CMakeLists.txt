@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(CentralEngine VERSION 0.2.0 LANGUAGES C CXX)
+project(CentralEngine VERSION 0.3.0 LANGUAGES C CXX)
 set(CENTRAL_LLAMA_COMMIT "d1044bc82712fbf08996080bef6298b24a27e9c7")
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(CENTRAL_LLAMA_SOURCE)
