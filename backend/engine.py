@@ -16,6 +16,7 @@ class Engine:
         self.active_path = None
         self.launch_profile = None
         self.started = None
+        self.stopped = False
         self.log_handle = None
         self.request_key = None
         self.cancelled = False
@@ -39,7 +40,10 @@ class Engine:
 
     async def status(self):
         owned = self.process is not None and self.process.poll() is None
-        result = {'connected':False,'owned':owned,'pid':self.process.pid if owned else None,
+        exit_code = self.process.poll() if self.process and not self.stopped else None
+        result = {'state':'starting' if owned else 'error' if exit_code is not None else 'disconnected',
+                  'exit_code':exit_code,'uptime':time.monotonic()-self.started if owned and self.started else None,
+                  'connected':False,'owned':owned,'pid':self.process.pid if owned else None,
                   'active_path':self.active_path if owned else None,'launch_profile':self.launch_profile if owned else None}
         try:
             async with self.client() as client:
@@ -49,7 +53,7 @@ class Engine:
                     r.raise_for_status()
                 caps, model, ctx = [r.json() for r in responses]
             self.kind = 'central' if caps.get('result') == 'CentralEngine' else 'koboldcpp'
-            result.update(connected=True,kind=self.kind,capabilities=caps,model=model.get('result'),context=ctx.get('value'))
+            result.update(connected=True,state='ready',kind=self.kind,capabilities=caps,model=model.get('result'),context=ctx.get('value'))
         except (httpx.HTTPError,ValueError,KeyError) as e:
             result['error'] = 'Motor indisponível: '+str(e)
         return result
@@ -82,9 +86,11 @@ class Engine:
         self.active_path = str(Path(model).resolve())
         self.launch_profile = profile.model_dump()
         self.started = time.monotonic()
+        self.stopped = False
         return {'pid':self.process.pid,'state':'iniciando','command':cmd}
 
     def stop(self):
+        self.stopped = True
         if self.process and self.process.poll() is None:
             self.process.terminate()
             try:
@@ -147,6 +153,7 @@ class Engine:
                     warning = 'Não foi possível verificar o controle de thinking do template. Parâmetro enviado; efeito não confirmado.'
         if self.kind == 'central':
             payload['repeat_penalty'] = payload.pop('rep_pen')
+            payload['cache_prompt'] = profile.prompt_cache
         tokens = await self.json('/api/extra/tokencount',payload)
         occupied = tokens.get('value',-1)
         if not isinstance(occupied,int) or occupied < 0:

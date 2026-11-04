@@ -2,6 +2,7 @@ import React from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {Copy} from 'lucide-react';
+import hljs from './highlight';
 
 export async function copyText(text,onError){
   try { await navigator.clipboard.writeText(text); }
@@ -16,7 +17,12 @@ function CodeBlock({children}){
   const language=code?.props.className?.match(/language-([\w+-]+)/)?.[1]||'Código';
   return <div className="code-block"><div className="code-toolbar" data-copy-exclude="true"><span>{language}</span><button type="button" aria-label="Copiar código" onClick={()=>copyText(text,onError)}><Copy size={14} aria-hidden="true"/>Copiar</button></div><pre>{children}</pre></div>;
 }
-function Code({className,children}){return <code className={className}>{children}</code>;}
+function Code({className,children}){
+  const text=String(children??'');
+  const language=className?.match(/language-([\w+-]+)/)?.[1];
+  const html=React.useMemo(()=>language&&hljs.getLanguage(language)?hljs.highlight(text,{language,ignoreIllegals:true}).value:null,[text,language]);
+  return html==null?<code className={className}>{children}</code>:<code className={className} dangerouslySetInnerHTML={{__html:html}}/>;
+}
 const components={pre:CodeBlock,code:Code};
 function MessageMarkdown({content,onError}){
   return <CopyErrorContext.Provider value={onError}><Markdown remarkPlugins={[remarkGfm]} components={components}>{content}</Markdown></CopyErrorContext.Provider>;

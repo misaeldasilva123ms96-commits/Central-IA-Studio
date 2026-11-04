@@ -74,3 +74,17 @@ créditos preservados e fontes correspondentes incluídas. Não reivindicamos a 
 dos kernels de inferência. Consulte [motor](engine/README.md) e
 [integração](docs/CENTRAL_ENGINE.md). O pacote validado no CI inclui o motor;
 a release v0.1.0 antiga não é alterada retroativamente.
+
+## Atualização 0.3.0 em desenvolvimento
+
+A interface passa a priorizar a conversa, com histórico lateral pesquisável,
+renomeação e exclusão com confirmação. Os ajustes da sessão ficam no botão
+**Ajustes**, e o seletor no cabeçalho leva à biblioteca para trocar de modelo.
+**Modelos → Selecionar pasta** abre um navegador de diretórios locais: entre na
+pasta e clique em **Usar esta pasta**, depois **Adicionar pasta**. Você também
+pode continuar digitando o caminho completo. Não há upload nem cópia dos GGUF.
+
+Os parâmetros completos incluem controles do cache do Central Engine 0.2.0.
+Consulte [a documentação do motor](engine/README.md) e
+[o relatório da atualização](docs/ATUALIZACAO_0_3_0.md). As releases anteriores
+continuam disponíveis; este código não representa um lançamento publicado.

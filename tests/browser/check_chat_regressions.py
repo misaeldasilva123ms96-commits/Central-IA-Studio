@@ -26,27 +26,33 @@ def do_post(self):
     data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
     handler.payloads.append(('generate',data))
     self.send_response(200);self.send_header('Content-Type','text/event-stream');self.end_headers()
-    first={'choices':[{'delta':{'content':answer},'finish_reason':None}]}
+    content='Você pode filtrar os valores negativos antes de calcular a soma:\n\n```python\n'+code+'```\n\nAssim, apenas valores maiores ou iguais a zero entram no cálculo.' if data['messages'][-1]['content'].startswith('Como somar') else answer
+    first={'choices':[{'delta':{'content':content},'finish_reason':None}]}
     self.wfile.write(('data: '+json.dumps(first)+'\n\n').encode());self.wfile.flush()
     finished.wait(20)
-    chunks=[{'choices':[{'delta':{},'finish_reason':'stop'}]},
+    chunks=[{'choices':[{'delta':{'content':'\nFim do exemplo.'},'finish_reason':None}]},{'choices':[{'delta':{},'finish_reason':'stop'}]},
             {'choices':[],'usage':{'prompt_tokens':40,'completion_tokens':20},'timings':{'predicted_per_second':3.5}}]
     for c in chunks:self.wfile.write(('data: '+json.dumps(c)+'\n\n').encode())
     self.wfile.write(b'data: [DONE]\n\n');self.wfile.flush()
 handler.do_POST=do_post
 
-async def check(port):
+async def check(port,directory):
     out=ROOT/'work/qa/chat-regressions';out.mkdir(parents=True,exist_ok=True)
     async with async_playwright() as p:
         browser=await p.chromium.launch(executable_path=None if os.environ.get('CENTRAL_USE_BUNDLED_BROWSER')=='1' else '/usr/bin/chromium',headless=True,args=['--no-sandbox'])
-        context=await browser.new_context(viewport={'width':1366,'height':768},permissions=['clipboard-read','clipboard-write'])
+        context=await browser.new_context(viewport={'width':1440,'height':900},permissions=['clipboard-read','clipboard-write'])
         page=await context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
         await page.goto(f'http://127.0.0.1:{port}/')
         await page.get_by_role('button',name='Configurar conexão',exact=True).click()
         await page.get_by_text('Endereço do motor',exact=True).locator('..').locator('input').fill(url)
         await page.get_by_role('button',name='Salvar conexão',exact=True).click()
+        await expect(page.get_by_role('alert')).to_contain_text('Configuração salva')
         await page.get_by_role('button',name='Conversas',exact=True).click()
-        await page.get_by_text('Conectado',exact=True).wait_for(timeout=12000)
+        try:await page.get_by_text('Conectado',exact=True).wait_for(timeout=12000)
+        except Exception:
+            await page.screenshot(path=str(out/'failure-connect.png'))
+            print(await page.locator('body').inner_text(),errors)
+            raise
         await page.get_by_role('button',name='Fechar aviso').click()
         await page.get_by_text('Mensagem de sistema',exact=True).click()
         system_box=page.get_by_role('textbox',name='Mensagem de sistema',exact=True)
@@ -75,10 +81,15 @@ async def check(port):
         await page.get_by_role('button',name='Conversas',exact=True).click()
         await expect(page.get_by_role('button',name='Interromper',exact=True)).to_be_visible()
         await expect(page.locator('.message.user')).to_contain_text(text)
+        await page.set_viewport_size({'width':1024,'height':600})
+        await page.locator('.messages').evaluate('(el)=>{el.scrollTop=0;}')
+        await page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+        assert await page.locator('.messages').evaluate('(el)=>el.scrollHeight-el.clientHeight>70')
         finished.set()
         await expect(page.locator('.message.assistant')).to_have_count(1)
         await expect(page.get_by_role('button',name='Interromper',exact=True)).to_have_count(0)
         await expect(page.locator('.message.user')).to_have_count(1)
+        assert await page.locator('.messages').evaluate('(el)=>el.scrollTop')<2
         await page.get_by_text('Mensagem de sistema',exact=True).click()
         assert await system_box.input_value()==custom
         await page.get_by_text('Mensagem de sistema',exact=True).click()
@@ -93,6 +104,7 @@ async def check(port):
         await (await poll.value).body()
         await page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
         assert await stable_code.evaluate('(node)=>node.isConnected')
+        await expect(page.locator('.message.assistant .hljs-keyword').first).to_be_visible()
 
         await page.locator('.message.assistant .code-toolbar button').first.click()
         assert await page.evaluate('navigator.clipboard.readText()')==code
@@ -105,11 +117,11 @@ async def check(port):
         assert unlabelled.rstrip() in copied['text/plain']
         assert 'A\tB\n1\t2\n' in copied['text/plain']
         assert 'palavra svg' in copied['text/plain']  # do not strip legitimate text
-        await page.evaluate("""()=>{const t=document.querySelector('.message.assistant pre code').firstChild;const start=t.textContent.indexOf('    return');const end=t.textContent.indexOf('\\n',start);const r=document.createRange();r.setStart(t,start);r.setEnd(t,end);const s=getSelection();s.removeAllRanges();s.addRange(r);}""")
+        await page.evaluate("""()=>{const code=document.querySelector('.message.assistant pre code');const all=code.textContent;const start=all.indexOf('    return');const end=all.indexOf('\\n',start);const walker=document.createTreeWalker(code,NodeFilter.SHOW_TEXT);let pos=0,node,r=document.createRange();while(node=walker.nextNode()){const next=pos+node.textContent.length;if(start>=pos&&start<next)r.setStart(node,start-pos);if(end>pos&&end<=next){r.setEnd(node,end-pos);break;}pos=next;}const s=getSelection();s.removeAllRanges();s.addRange(r);}""")
         await page.keyboard.press('Control+c')
         assert await page.evaluate('navigator.clipboard.readText()')==code.splitlines()[1]
         await page.evaluate('getSelection().removeAllRanges()')
-        for width,height in [(1366,768),(1024,600),(390,844),(390,500),(844,390)]:
+        for width,height in [(1586,992),(1440,900),(1366,768),(1024,600),(390,844),(390,500),(844,390)]:
             await page.set_viewport_size({'width':width,'height':height})
             await page.wait_for_function('''()=>{const c=document.querySelector('.composer').getBoundingClientRect();return c.bottom<=innerHeight+1;}''')
             bounds=await page.evaluate('''()=>({w:document.documentElement.scrollWidth,h:document.documentElement.scrollHeight,header:document.querySelector('header').getBoundingClientRect().height})''')
@@ -126,9 +138,83 @@ async def check(port):
         await expect(page.get_by_role('textbox',name='Mensagem',exact=True)).to_be_enabled()
         await expect(page.locator('.message.user')).to_have_count(1)
         await expect(page.get_by_role('alert')).to_contain_text('Contexto de teste esgotado')
+        # New history management and local directory chooser exercise real API.
+        await page.set_viewport_size({'width':1440,'height':900})
+        await page.get_by_role('button',name='Fechar aviso').click()
+        await page.get_by_role('button',name='Modelos',exact=True).click()
+        await page.get_by_role('textbox',name='Pasta com modelos (GGUF)',exact=True).fill(directory)
+        await page.get_by_role('button',name='Selecionar pasta',exact=True).click()
+        picker=page.get_by_role('dialog',name='Selecionar pasta de modelos')
+        await picker.get_by_role('button',name='biblioteca ç',exact=True).click()
+        await page.screenshot(path=str(out/'folder-picker.png'))
+        await picker.get_by_role('button',name='Usar esta pasta',exact=True).click()
+        await expect(page.get_by_role('textbox',name='Pasta com modelos (GGUF)',exact=True)).to_have_value(str(Path(directory)/'biblioteca ç'))
+        await page.get_by_role('button',name='Adicionar pasta',exact=True).click()
+        await expect(page.get_by_role('button',name='teste.gguf',exact=True)).to_be_visible()
+        await page.get_by_role('button',name='Selecionar pasta',exact=True).click()
+        await picker.get_by_role('button',name='Pasta acima',exact=True).click()
+        await expect(picker.get_by_role('textbox',name='Caminho da pasta')).to_have_value(directory)
+        await page.keyboard.press('Escape')
+        await expect(picker).to_have_count(0)
+        await page.get_by_role('button',name='Conversas',exact=True).click()
+        await page.get_by_role('button',name='Ajustes da sessão',exact=True).click()
+        await expect(page.get_by_role('dialog',name='Ajustes da sessão')).to_be_visible()
+        await page.keyboard.press('Escape')
+        await page.locator('.history-title').first.hover()
+        await page.get_by_role('button',name='Renomear '+text).click()
+        await page.get_by_role('dialog').get_by_role('textbox').fill('Conversa renomeada')
+        await page.get_by_role('button',name='Salvar',exact=True).click()
+        await expect(page.locator('.history-title').filter(has_text='Conversa renomeada')).to_have_count(1)
+        await page.get_by_role('textbox',name='Pesquisar histórico').fill('inexistente')
+        await expect(page.get_by_text('Nenhuma conversa encontrada.')).to_be_visible()
+        await page.get_by_role('textbox',name='Pesquisar histórico').fill('')
+        await page.get_by_role('button',name='Nova conversa',exact=True).click()
+        await expect(page.get_by_role('heading',name='Como posso ajudar?')).to_be_visible()
+        await page.get_by_role('button',name='Revise meu código',exact=True).click()
+        await expect(page.get_by_role('textbox',name='Mensagem',exact=True)).to_have_value('Revise este código e sugira melhorias:\n\n')
+        history_gate=asyncio.Event()
+        async def hold_history(route):
+            await history_gate.wait();await route.continue_()
+        await page.route('**/api/system-prompt/*',hold_history)
+        await page.locator('.history-title').filter(has_text='Conversa renomeada').click()
+        await expect(page.get_by_role('textbox',name='Mensagem',exact=True)).to_be_disabled()
+        history_gate.set()
+        await expect(page.locator('.message.assistant')).to_have_count(1)
+        await expect(page.get_by_role('textbox',name='Mensagem',exact=True)).to_be_enabled()
+        await page.unroute('**/api/system-prompt/*',hold_history)
+        await page.locator('.history-title').first.hover()
+        await page.get_by_role('button',name='Excluir Conversa renomeada').click()
+        await page.get_by_role('button',name='Cancelar',exact=True).click()
+        await expect(page.locator('.history-title').filter(has_text='Conversa renomeada')).to_have_count(1)
+        await page.locator('.history-title').first.hover()
+        await page.get_by_role('button',name='Excluir Conversa renomeada').click()
+        await page.get_by_role('dialog').get_by_role('button',name='Excluir conversa',exact=True).click()
+        await expect(page.locator('.history-row')).to_have_count(0)
+        await page.get_by_role('button',name='Ativar tema claro').click()
+        await page.screenshot(path=str(out/'empty-light.png'))
+        await page.get_by_role('button',name='Ativar tema escuro').click()
+        # Keep a readable preview of the real interface with explicitly synthetic content.
+        await page.unroute('**/api/generate',reject)
+        await page.get_by_role('textbox',name='Mensagem',exact=True).fill('Como somar os valores dos fornecedores sem considerar os negativos?')
+        await page.get_by_role('button',name='Enviar',exact=True).click()
+        await expect(page.locator('.message.assistant')).to_have_count(1)
+        await expect(page.get_by_role('button',name='Interromper',exact=True)).to_have_count(0)
+        bootstrap=(await (await context.request.get(f'http://127.0.0.1:{port}/api/bootstrap')).json())
+        headers={'X-Central-Token':bootstrap['token']}
+        rows=await (await context.request.get(f'http://127.0.0.1:{port}/api/conversations')).json()
+        await context.request.patch(f'http://127.0.0.1:{port}/api/conversations/'+rows[0]['id'],headers=headers,data={'title':'Revisão de código Python'})
+        for title in ['Planejamento da semana','Ideias para um projeto']:
+            await context.request.post(f'http://127.0.0.1:{port}/api/conversations',headers=headers,data={'title':title})
+        await page.reload()
+        await page.locator('.history-title').filter(has_text='Revisão de código Python').click()
+        await expect(page.locator('.message.assistant')).to_have_count(1)
+        await page.set_viewport_size({'width':1586,'height':992})
+        await page.screenshot(path=str(out/'preview-desktop.png'))
+        await page.set_viewport_size({'width':390,'height':844})
+        await page.screenshot(path=str(out/'preview-mobile.png'))
         assert not errors,errors
         await browser.close()
-    print('UI: envio antes da resposta, sistema preservado, abas durante geração, Markdown, cópia sem SVG e cinco viewports: passaram.')
+    print('UI: envio antes da resposta, sistema preservado, abas durante geração, Markdown, cópia sem SVG seleção de pastas, gestão de histórico e sete viewports: passaram.')
 
 with tempfile.TemporaryDirectory() as directory:
     with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
@@ -138,6 +224,7 @@ with tempfile.TemporaryDirectory() as directory:
             try:urllib.request.urlopen(f'http://127.0.0.1:{port}/api/bootstrap',timeout=.2);break
             except Exception:time.sleep(.1)
         else:raise RuntimeError('Gerenciador não iniciou')
-        asyncio.run(check(port))
+        fixtures.gguf(Path(directory)/'biblioteca ç'/'teste.gguf')
+        asyncio.run(check(port,directory))
     finally:
         finished.set();proc.terminate();proc.wait(timeout=10);fake.close()

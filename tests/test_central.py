@@ -379,3 +379,82 @@ def test_thinking_uses_loaded_template_not_model_name(client):
     stats=client.get('/api/conversations/'+cid).json()[-1]['stats']
     assert stats['thinking_applied']=='default' and stats['thinking_template_control'] is False
     assert 'não garante aceleração' in stats['warning']
+
+
+def test_directory_browser_local_paths(client,tmp_path):
+    directory=tmp_path/'modelos com espaço ç';directory.mkdir()
+    (directory/'Ministral').mkdir();(directory/'outro').mkdir()
+    (directory/'arquivo.gguf').write_bytes(b'GGUF')
+    reply=client.get('/api/folders',params={'path':str(directory)})
+    assert reply.status_code==200
+    data=reply.json()
+    assert data['path']==str(directory.resolve())
+    assert data['parent']==str(tmp_path.resolve())
+    assert [d['name'] for d in data['directories']]==['Ministral','outro']
+    assert client.get('/api/folders',params={'path':str(directory/'missing')}).status_code==400
+    assert client.get('/api/folders',params={'path':str(directory/'arquivo.gguf')}).status_code==400
+    assert client.get('/api/folders').json()['roots']
+
+
+def test_conversation_management_preserves_unrelated_data(client):
+    cid=client.post('/api/conversations',json={'title':'Original'}).json()['id']
+    other=client.post('/api/conversations',json={'title':'Preservada'}).json()['id']
+    store=client.app.state.store
+    store.add_message(cid,'user','Olá');store.put('system:'+cid,'Regra local')
+    assert client.patch('/api/conversations/'+cid,json={'title':'Novo título'}).status_code==200
+    assert client.get('/api/conversations?q=Novo título').json()[0]['id']==cid
+    assert client.patch('/api/conversations/'+cid,json={'title':'   '}).status_code==400
+    assert client.get('/api/conversations/'+cid).json()[0]['content']=='Olá'
+    assert client.delete('/api/conversations/'+cid).status_code==200
+    assert client.get('/api/conversations/'+cid).status_code==404
+    assert store.get('system:'+cid) is None
+    assert store.messages(cid)==[]
+    assert client.get('/api/conversations/'+other).status_code==200
+
+
+def test_old_profile_gets_cache_defaults(client):
+    client.app.state.store.save_profile('old',{'context':2048,'threads':3})
+    restored=client.get('/api/profiles?model=old').json()
+    assert restored['threads']==3 and restored['context']==2048
+    assert restored['prompt_cache'] is True and restored['cache_ram_mib']==256
+    assert client.put('/api/profiles',json={'cache_ram_mib':-1}).status_code==422
+    assert client.put('/api/profiles',json={'cache_ram_mib':8193}).status_code==422
+
+
+def test_library_updates_during_generation_keep_connection(client,tmp_path):
+    engine=client.app.state.engine
+    import asyncio
+    asyncio.run(engine.generation_lock.acquire())
+    try:
+        settings=client.get('/api/bootstrap').json()['settings']
+        settings['folders']=[str(tmp_path)]
+        assert client.put('/api/settings',json=settings).status_code==200
+        settings['engine_url']='http://127.0.0.1:5555'
+        assert client.put('/api/settings',json=settings).status_code==400
+        cid=client.post('/api/conversations',json={}).json()['id']
+        assert client.delete('/api/conversations/'+cid).status_code==400
+    finally:
+        engine.generation_lock.release()
+    client.app.state.store.put('settings',{'engine_url':'invalid'})
+    assert client.put('/api/settings',json={}).status_code==200
+
+
+def test_engine_lifecycle_reports_start_error_and_requested_stop(tmp_path):
+    import subprocess
+    from backend.engine import Engine
+    store=Store(tmp_path/'lifecycle')
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
+    store.put('settings',{'engine_url':f'http://127.0.0.1:{port}'})
+    engine=Engine(store)
+    engine.process=subprocess.Popen([sys.executable,'-c','import time; time.sleep(20)'])
+    try:
+        assert asyncio.run(engine.status())['state']=='starting'
+    finally:
+        engine.stop()
+    assert asyncio.run(engine.status())['state']=='disconnected'
+    engine.stopped=False
+    engine.process=subprocess.Popen([sys.executable,'-c','raise SystemExit(2)'])
+    engine.process.wait(timeout=10)
+    status=asyncio.run(engine.status())
+    assert status['state']=='error' and status['exit_code']==2

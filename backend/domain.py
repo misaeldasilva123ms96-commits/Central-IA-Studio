@@ -19,6 +19,8 @@ class Profile(BaseModel):
     gpu_layers: int = Field(0, ge=0, le=1000)
     cache_kv: str = 'q8_0'
     flash_attention: bool = True
+    prompt_cache: bool = True
+    cache_ram_mib: int = Field(256, ge=0, le=8192)
     template: str = ''
     thinking: str = 'default'
     mode: str = 'personalizado'
@@ -73,7 +75,7 @@ class Settings(BaseModel):
     def dirs(cls, values):
         return list(dict.fromkeys(str(Path(v).expanduser().resolve()) for v in values if v.strip()))
 
-RESTART_FIELDS = ['context','threads','blas_threads','batch_size','gpu_layers','cache_kv','flash_attention','template']
+RESTART_FIELDS = ['context','threads','blas_threads','batch_size','gpu_layers','cache_kv','flash_attention','template','cache_ram_mib']
 
 def thinking_value(p):
     return 'off' if p.mode == 'rapido' else 'on' if p.mode == 'profundo' else p.thinking
@@ -103,6 +105,8 @@ def build_command(executable, model, profile, port):
             '--contextsize', str(p.context), '--threads', str(p.threads), '--blasthreads', str(p.blas_threads),
             '--blasbatchsize', str(p.batch_size), '--gpulayers', str(p.gpu_layers), '--quantkv', p.cache_kv,
             '--jinja']
+    if exe.stem == 'central-engine-nocuda':
+        args += ['--prompt-cache-mib', str(p.cache_ram_mib)]
     if not p.flash_attention:
         args.append('--noflashattention')
     if p.template:

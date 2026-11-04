@@ -1,0 +1,6 @@
+import React from 'react';
+import {Plus,Search,MessageSquare,Pencil,Trash2} from 'lucide-react';
+export default function ConversationHistory({conversations,cid,query,setQuery,busy,onNew,onSelect,onRename,onDelete}){
+ return <><button className="new-chat" disabled={busy} onClick={onNew}><Plus size={19}/>Nova conversa</button><label className="search history-search"><Search size={17}/><input aria-label="Pesquisar histórico" value={query} placeholder="Pesquisar conversas" onChange={e=>setQuery(e.target.value)}/></label>
+ <div className="history-list"><h2>Suas conversas</h2>{conversations.map(c=><div key={c.id} className={'history-row '+(cid===c.id?'selected':'')}><button className="history-title" disabled={busy} onClick={()=>onSelect(c.id)} title={c.title}><MessageSquare size={15}/><span>{c.title}</span></button><div className="history-actions"><button disabled={busy} aria-label={'Renomear '+c.title} onClick={()=>onRename(c)}><Pencil size={13}/></button><button disabled={busy} aria-label={'Excluir '+c.title} onClick={()=>onDelete(c)}><Trash2 size={13}/></button></div></div>)}{!conversations.length&&<p>{query?'Nenhuma conversa encontrada.':'Suas conversas aparecerão aqui.'}</p>}</div></>;
+}

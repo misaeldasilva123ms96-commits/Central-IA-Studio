@@ -8,7 +8,7 @@ with sync_playwright() as p:
     page=browser.new_page(viewport={'width':1440,'height':900},device_scale_factor=1)
     page.on('pageerror',lambda e:errors.append(str(e)))
     page.goto('http://127.0.0.1:8765/')
-    page.get_by_role('heading',name='Sua IA, no seu computador.').wait_for()
+    page.get_by_role('heading',name='Como posso ajudar?').wait_for()
     page.screenshot(path=str(out/'desktop.png'),full_page=True)
     assert page.get_by_role('button',name='Enviar',exact=True).is_disabled()
     page.get_by_role('button',name='Configurar conexão',exact=True).click()
