@@ -203,10 +203,6 @@ class Engine:
                     yield json.loads('\n'.join(data))
 
     async def stream(self, payload):
-        if self.kind != 'central':
-            async for chunk in self._read_stream(payload):
-                yield chunk
-            return
         iterator = self._read_stream(payload).__aiter__()
         cancelled = asyncio.create_task(self.abort_event.wait())
         pending = None

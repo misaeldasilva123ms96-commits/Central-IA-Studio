@@ -93,7 +93,17 @@ async def check(port,project):
         assert 'Fornecedor,Valor' in sent['messages'][-1]['content'] and 'Documento arrastado' in sent['messages'][-1]['content']
         await page.get_by_role('button',name='Nova conversa',exact=True).click()
         buffer=io.BytesIO();Image.new('RGB',(24,18),'#00a080').save(buffer,format='PNG');original=buffer.getvalue()
+        upload_started=asyncio.Event();release_upload=asyncio.Event()
+        async def hold_upload(route):
+            upload_started.set();await release_upload.wait();await route.continue_()
+        await page.route('**/api/attachments?*',hold_upload)
         await host.get_by_label('Selecionar imagens',exact=True).set_input_files({'name':'imagem.png','mimeType':'image/png','buffer':original})
+        await upload_started.wait()
+        await expect(page.get_by_role('button',name='Nova conversa',exact=True)).to_be_disabled()
+        await expect(page.locator('.history-title').first).to_be_disabled()
+        await page.keyboard.press('Control+Shift+O')
+        await expect(host.locator('.composer-area .attachment')).to_have_count(1)
+        release_upload.set()
         await expect(host.locator('.composer-area .spin')).to_have_count(0,timeout=30000)
         await expect(host.get_by_text('O modelo carregado não informou suporte a visão.',exact=False)).to_be_visible()
         await expect(host.get_by_role('button',name='Enviar',exact=True)).to_be_disabled()
