@@ -3,6 +3,7 @@ function plain(node){
   if(node.nodeType===Node.TEXT_NODE)return node.textContent;
   if(node.nodeType!==Node.ELEMENT_NODE)return '';
   if(node.tagName==='BR')return '\n';
+  if(node.tagName==='TR')return Array.from(node.children).filter(c=>['TH','TD'].includes(c.tagName)).map(c=>plain(c).replace(/\n+$/,'')).join('\t')+'\n';
   if(node.tagName==='PRE'){
     const code=node.querySelector('code')||node;
     const text=code.textContent.replace(/\n$/,'');
