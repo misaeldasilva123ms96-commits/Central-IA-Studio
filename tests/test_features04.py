@@ -309,3 +309,45 @@ def test_projectors_are_identified_and_cannot_start_as_text_models(client,tmp_pa
     executable=tmp_path/('central-engine-nocuda.exe' if sys.platform=='win32' else 'central-engine-nocuda');executable.write_bytes(b'fixture')
     command=build_command(executable,file,Profile(projector=str(file)),5001)
     assert command[command.index('--mmproj')+1]==str(file.resolve())
+
+
+def test_tool_loop_preserves_kobold_generation_key(tmp_path):
+    from backend.turns import run_turn
+    from backend.domain import Profile
+    store=Store(tmp_path/'data');cid=store.conversation('Stop')
+    class FakeEngine:
+        def __init__(self):self.abort_event=asyncio.Event();self.seen=[]
+        async def stream(self,payload):
+            self.seen.append(payload)
+            content=json.dumps({'tool':'list_files','arguments':{'path':'.'}}) if len(self.seen)==1 else 'Concluído'
+            yield {'choices':[{'delta':{'content':content},'finish_reason':'stop'}],'usage':{'completion_tokens':10}}
+        async def prepare(self,*args):return {'max_tokens':100},{}
+    async def check():
+        engine=FakeEngine()
+        options={'kind':'agent','agent_mode':'plan','workspace':str(tmp_path),'internet':False,'access':'ask'}
+        async for _ in run_turn(engine,store,ApprovalBroker(),cid,[{'role':'user','content':'Liste'}],Profile(),{'genkey':'active-key','max_tokens':100},[{'name':'list_files'}],False,options):pass
+        assert len(engine.seen)==2
+        assert all(p['genkey']=='active-key' for p in engine.seen)
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize('kind',['central','koboldcpp'])
+def test_stop_disconnects_waiting_stream_for_both_engines(tmp_path,kind):
+    from backend.engine import Engine
+    async def check():
+        engine=Engine(Store(tmp_path/kind));engine.kind=kind;engine.request_key='active-key'
+        started=asyncio.Event();closed=asyncio.Event();keys=[]
+        async def read(payload):
+            try:
+                started.set();await asyncio.Event().wait()
+                yield {}
+            finally:closed.set()
+        async def request(path,data):keys.append(data['genkey']);return {'interrupted':True}
+        engine._read_stream=read;engine.json=request
+        async def consume():
+            async for _ in engine.stream({'genkey':'active-key'}):pass
+        task=asyncio.create_task(consume());await started.wait()
+        await engine.abort();await asyncio.wait_for(task,1)
+        assert closed.is_set()
+        assert keys==(['active-key'] if kind=='koboldcpp' else [])
+    asyncio.run(check())

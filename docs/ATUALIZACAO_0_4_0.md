@@ -130,8 +130,9 @@ par modelo/mmproj treinado permanece dependente de validação com esse par.
 
 ### Resultado local e comparação
 
-48 testes da suíte integrada passaram, seguidos do teste focado de identificação
-/proibição de iniciar projetor como modelo (49 casos no total). Os três roteiros de
+52 testes da suíte integrada passaram, incluindo interrupção em ambos os motores,
+preservação da chave entre etapas e identificação de projetores. O roteiro novo
+também verifica que a conversa não pode ser trocada durante upload. Os três roteiros de
 navegador passaram: funcionalidades novas, regressões de chat/cópia e E2E anterior de
 5000 tokens solicitados, benchmark e regeneração. A espera de conexão do roteiro
 antigo foi ajustada de 12 para 20 segundos para acomodar o polling assíncrono; não
