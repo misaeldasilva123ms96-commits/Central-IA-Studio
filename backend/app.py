@@ -20,6 +20,7 @@ from .domain import Profile, Settings, RESTART_FIELDS, bundled_engine
 from .engine import Engine
 from .gguf import discover
 from .storage import Store
+from .generation_stats import DEFAULT_SYSTEM_PROMPT,backend_timings,estimate_seconds
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -30,7 +31,7 @@ class GenerateInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     conversation: str
     content: str = Field('',max_length=200000)
-    system: str = Field('',max_length=100000)
+    system: str | None = Field(None,max_length=100000)
     profile: Profile = Field(default_factory=Profile)
     action: str = 'send'
     benchmark: bool = False
@@ -107,7 +108,7 @@ def create_app(data_dir=None):
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.2.0'}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.2.1'}
 
     @app.put('/api/settings')
     def settings(value: Settings):
@@ -220,8 +221,9 @@ def create_app(data_dir=None):
             if value.action == 'continue' and (not history or history[-1]['role'] != 'assistant'):
                 raise ValueError('Não há resposta para continuar')
             messages = [{'role':m['role'],'content':m['content']} for m in history]
-            if value.system:
-                messages.insert(0,{'role':'system','content':value.system})
+            system = value.system if value.system is not None else store.get('system:'+value.conversation,DEFAULT_SYSTEM_PROMPT)
+            if system:
+                messages.insert(0,{'role':'system','content':system})
             if value.action == 'send':
                 if not value.content.strip():
                     raise ValueError('Escreva uma mensagem')
@@ -229,8 +231,9 @@ def create_app(data_dir=None):
             payload, limits = await engine.prepare(messages,value.profile)
             with store.db() as db:
                 prior = db.execute("SELECT stats FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 200").fetchall()
-            rates = [s['tokens_per_second'] for row in prior if (s := json.loads(row['stats'])).get('model') == limits['model'] and s.get('tokens_per_second',0) and s.get('finish_reason') not in ['erro','interrompida']]
-            limits['estimated_seconds'] = limits['effective_output'] / (sum(rates)/len(rates)) if rates else None
+            limits['estimated_seconds'],limits['estimate_samples'] = estimate_seconds(
+                [json.loads(row['stats']) for row in prior],limits['model'],engine.kind,
+                value.profile.model_dump(),limits['effective_output'])
             payload['genkey'] = uuid.uuid4().hex
             engine.request_key, engine.cancelled = payload['genkey'], False
             engine.abort_event.clear()
@@ -241,7 +244,7 @@ def create_app(data_dir=None):
                     # Preserve o resultado anterior em avaliação antes de regenerar.
                     db.execute('INSERT INTO benchmarks VALUES (?,?,?)',(uuid.uuid4().hex,time.time(),json.dumps({'kind':'regenerated_previous','result':removed['content'],'stats':removed['stats']})))
                     db.execute('DELETE FROM messages WHERE id=?',(removed['id'],))
-            store.put('system:'+value.conversation,value.system)
+            store.put('system:'+value.conversation,system)
         except BaseException:
             engine.request_key = None
             engine.generation_lock.release()
@@ -253,6 +256,7 @@ def create_app(data_dir=None):
         async def events():
             start_time, first = time.perf_counter(), None
             content, reasoning, finish, usage = '', '', None, {}
+            timings = {}
             error = None
             try:
                 yield sse('limits',limits)
@@ -265,6 +269,8 @@ def create_app(data_dir=None):
                         raise ValueError(str(chunk['error']))
                     if chunk.get('usage'):
                         usage = chunk['usage']
+                    if chunk.get('timings'):
+                        timings = backend_timings(chunk['timings'])
                     for choice in chunk.get('choices',[]):
                         delta = choice.get('delta',{})
                         c, r = delta.get('content') or '', delta.get('reasoning_content') or ''
@@ -295,7 +301,8 @@ def create_app(data_dir=None):
                 stats = limits | {'usage':usage,'generated_tokens':count,'finish_reason':finish,
                     'elapsed':elapsed,'ttft':first-start_time if first else None,
                     'tokens_per_second':count/elapsed if count is not None and elapsed else None,
-                    'truncated':finish=='length','error':error}
+                    'truncated':finish=='length','error':error,'backend_timings':timings,
+                    'engine_kind':engine.kind,'profile':value.profile.model_dump()}
                 try:
                     store.add_message(value.conversation,'assistant',content,reasoning,stats)
                     if value.benchmark:
@@ -315,7 +322,7 @@ def create_app(data_dir=None):
 
     @app.get('/api/system-prompt/{cid}')
     def system_prompt(cid: str):
-        return {'content':store.get('system:'+cid,'')}
+        return {'content':store.get('system:'+cid,DEFAULT_SYSTEM_PROMPT)}
 
     @app.get('/api/metrics')
     async def metrics():

@@ -74,6 +74,7 @@ jobs:
       - shell: pwsh
         run: |
           Expand-Archive 'Central-IA-Studio-Windows-x64.zip' 'work/package smoke'
+          $expectedVersion = (Get-Content 'frontend/package.json' -Raw | ConvertFrom-Json).version
           $exe = Join-Path $PWD 'work/package smoke/CentralIAStudio/CentralIAStudio.exe'
           $process = Start-Process $exe -ArgumentList '--no-browser' -PassThru
           try {
@@ -81,7 +82,7 @@ jobs:
             for ($i=0; $i -lt 20; $i++) {
               try {
                 $r = Invoke-RestMethod 'http://127.0.0.1:8765/api/bootstrap'
-                if ($r.version -eq '0.2.0') { $ready = $true; break }
+                if ($r.version -eq $expectedVersion) { $ready = $true; break }
               } catch { Start-Sleep -Seconds 1 }
             }
             if (!$ready) { throw 'Executavel empacotado nao iniciou' }

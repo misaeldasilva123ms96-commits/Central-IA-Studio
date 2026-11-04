@@ -332,3 +332,50 @@ def test_source_packaging_excludes_uppercase_models_and_binaries(tmp_path,monkey
     (tmp_path/'app.py').write_text('print("source")')
     monkeypatch.setattr(package_source,'ROOT',tmp_path)
     assert [str(rel) for _,rel in package_source.source_files()]==['app.py']
+
+
+def test_default_portuguese_prompt_is_visible_editable_and_preserved(client,fake_engine):
+    from backend.generation_stats import DEFAULT_SYSTEM_PROMPT
+    assert client.get('/api/bootstrap').json()['default_system_prompt']==DEFAULT_SYSTEM_PROMPT
+    cid=client.post('/api/conversations',json={}).json()['id']
+    assert client.get('/api/system-prompt/'+cid).json()['content']==DEFAULT_SYSTEM_PROMPT
+    assert client.post('/api/generate',json={'conversation':cid,'content':'ola'}).status_code==200
+    assert fake_engine[1].payloads[-1][1]['messages'][0]=={'role':'system','content':DEFAULT_SYSTEM_PROMPT}
+    # Explicit clearing is respected, including after reopening an old chat.
+    client.post('/api/generate',json={'conversation':cid,'content':'sem sistema','system':''})
+    assert all(m['role']!='system' for m in fake_engine[1].payloads[-1][1]['messages'])
+    assert client.get('/api/system-prompt/'+cid).json()['content']==''
+    client.post('/api/generate',json={'conversation':cid,'content':'continuar'})
+    assert all(m['role']!='system' for m in fake_engine[1].payloads[-1][1]['messages'])
+
+
+def test_estimate_requires_matching_engine_profile_and_uses_weighted_time():
+    from backend.generation_stats import estimate_seconds,backend_timings
+    profile=Profile().model_dump()
+    common={'model':'Ministral','engine_kind':'central','profile':profile,'finish_reason':'stop'}
+    previous=[common|{'generated_tokens':10,'elapsed':20},common|{'generated_tokens':90,'elapsed':30},
+              common|{'engine_kind':'koboldcpp','generated_tokens':10000,'elapsed':1},
+              common|{'profile':profile|{'context':8192},'generated_tokens':10000,'elapsed':1}]
+    assert estimate_seconds(previous,'Ministral','central',profile,400)==(200,2)
+    assert estimate_seconds(previous,'Outro','central',profile,400)==(None,0)
+    assert backend_timings({'predicted_per_second':3.5,'prompt_ms':100,'other':'x','predicted_ms':float('nan')})=={'prompt_ms':100,'predicted_per_second':3.5}
+
+
+def test_thinking_uses_loaded_template_not_model_name(client):
+    engine=client.app.state.engine
+    original_status=engine.status
+    original_json=engine.json
+    async def status():
+        value=await original_status();engine.kind='central';return value
+    async def json_call(path,payload=None):
+        if path=='/props':return {'chat_template':'{{ messages }}','chat_template_caps':{'supports_reasoning_effort':False}}
+        return await original_json(path,payload)
+    engine.status=status;engine.json=json_call
+    cid=client.post('/api/conversations',json={}).json()['id']
+    r=client.post('/api/generate',json={'conversation':cid,'content':'Teste','profile':Profile(mode='profundo').model_dump()})
+    assert r.status_code==400 and 'não declara controle de thinking' in r.json()['detail']
+    r=client.post('/api/generate',json={'conversation':cid,'content':'Teste','profile':Profile(mode='rapido').model_dump()})
+    assert r.status_code==200
+    stats=client.get('/api/conversations/'+cid).json()[-1]['stats']
+    assert stats['thinking_applied']=='default' and stats['thinking_template_control'] is False
+    assert 'não garante aceleração' in stats['warning']
