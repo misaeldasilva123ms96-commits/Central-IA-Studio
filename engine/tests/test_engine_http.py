@@ -22,6 +22,8 @@ from backend.storage import Store
 
 binary=Path(sys.argv[1]).resolve();model=Path(sys.argv[2]).resolve()
 assert 'CentralEngine' in subprocess.check_output([binary,'--version'],text=True)
+assert '--mmproj' in subprocess.check_output([binary,'--help'],text=True)
+assert subprocess.run([binary,'--model',str(model),'--mmproj',str(model.parent/'missing-projector.gguf')],capture_output=True).returncode==2
 for args in [['--host','0.0.0.0'],['--hf-repo','unwanted/repo'],['--tools','all'],['--gpulayers','1'],['--prompt-cache-mib','-1'],['--prompt-cache-mib','8193']]:
     assert subprocess.run([binary,*args],capture_output=True).returncode == 2
 with tempfile.TemporaryDirectory() as directory:
@@ -50,6 +52,8 @@ with tempfile.TemporaryDirectory() as directory:
                 await asyncio.sleep(.2)
             else: raise TimeoutError('Motor nao carregou')
             assert status['kind']=='central'
+            assert status['vision'] is False
+            assert status['capabilities']['version']=='0.3.0'
             assert status['context']==4096,status
             assert status['capabilities']['cpu_only'] is True
             diagnostic=await engine.json('/central/v1/status')

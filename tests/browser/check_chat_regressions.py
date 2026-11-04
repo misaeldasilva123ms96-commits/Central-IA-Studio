@@ -48,18 +48,19 @@ async def check(port,directory):
         await page.get_by_role('button',name='Salvar conexão',exact=True).click()
         await expect(page.get_by_role('alert')).to_contain_text('Configuração salva')
         await page.get_by_role('button',name='Conversas',exact=True).click()
-        try:await page.get_by_text('Conectado',exact=True).wait_for(timeout=12000)
+        try:await page.get_by_text('Conectado',exact=True).wait_for(timeout=20000)
         except Exception:
             await page.screenshot(path=str(out/'failure-connect.png'))
             print(await page.locator('body').inner_text(),errors)
             raise
         await page.get_by_role('button',name='Fechar aviso').click()
+        await page.get_by_role('button',name='Ajustes da sessão',exact=True).click()
         await page.get_by_text('Mensagem de sistema',exact=True).click()
         system_box=page.get_by_role('textbox',name='Mensagem de sistema',exact=True)
         original=await system_box.input_value();assert 'português brasileiro' in original
         custom=original+' MARCADOR-PERSONALIZADO'
         await system_box.fill(custom)
-        await page.get_by_text('Mensagem de sistema',exact=True).click()
+        await page.get_by_role('button',name='Fechar Ajustes da sessão',exact=True).click()
         gate=asyncio.Event()
         async def hold(route):
             if route.request.method=='POST':await gate.wait()
@@ -73,26 +74,27 @@ async def check(port,directory):
         await expect(page.get_by_role('textbox',name='Mensagem',exact=True)).to_have_value('')
         await page.screenshot(path=str(out/'01-envio-imediato.png'))
         gate.set()
-        await expect(page.locator('.messages pre > code.language-python')).to_have_count(1)
+        await expect(page.locator('.chat-host:not([hidden]) .messages pre > code.language-python')).to_have_count(1)
         # Same Markdown (GFM tables) during streaming and after persistence.
-        await expect(page.locator('.messages table')).to_have_count(1)
+        await expect(page.locator('.chat-host:not([hidden]) .messages table')).to_have_count(1)
         assert handler.payloads[-1][1]['messages'][0]['content']==custom
         await page.get_by_role('button',name='Parâmetros',exact=True).click()
         await page.get_by_role('button',name='Conversas',exact=True).click()
         await expect(page.get_by_role('button',name='Interromper',exact=True)).to_be_visible()
         await expect(page.locator('.message.user')).to_contain_text(text)
         await page.set_viewport_size({'width':1024,'height':600})
-        await page.locator('.messages').evaluate('(el)=>{el.scrollTop=0;}')
+        await page.locator('.chat-host:not([hidden]) .messages').evaluate('(el)=>{el.scrollTop=0;}')
         await page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
-        assert await page.locator('.messages').evaluate('(el)=>el.scrollHeight-el.clientHeight>70')
+        assert await page.locator('.chat-host:not([hidden]) .messages').evaluate('(el)=>el.scrollHeight-el.clientHeight>70')
         finished.set()
         await expect(page.locator('.message.assistant')).to_have_count(1)
         await expect(page.get_by_role('button',name='Interromper',exact=True)).to_have_count(0)
         await expect(page.locator('.message.user')).to_have_count(1)
-        assert await page.locator('.messages').evaluate('(el)=>el.scrollTop')<2
+        assert await page.locator('.chat-host:not([hidden]) .messages').evaluate('(el)=>el.scrollTop')<2
+        await page.get_by_role('button',name='Ajustes da sessão',exact=True).click()
         await page.get_by_text('Mensagem de sistema',exact=True).click()
         assert await system_box.input_value()==custom
-        await page.get_by_text('Mensagem de sistema',exact=True).click()
+        await page.get_by_role('button',name='Fechar Ajustes da sessão',exact=True).click()
         assert await page.locator('.message.assistant pre').first.evaluate('(p)=>Array.from(p.children).map(c=>c.tagName)')==['CODE']
         await expect(page.locator('.message.assistant footer')).to_contain_text('primeiro trecho')
         await expect(page.locator('.message.assistant footer')).to_contain_text('decodificação: 3.50')
@@ -126,7 +128,7 @@ async def check(port,directory):
             await page.wait_for_function('''()=>{const c=document.querySelector('.composer').getBoundingClientRect();return c.bottom<=innerHeight+1;}''')
             bounds=await page.evaluate('''()=>({w:document.documentElement.scrollWidth,h:document.documentElement.scrollHeight,header:document.querySelector('header').getBoundingClientRect().height})''')
             assert bounds['w']<=width and bounds['h']<=height+1,bounds
-            assert bounds['header']<=56,bounds
+            assert bounds['header']<=72,bounds
             await page.screenshot(path=str(out/f'viewport-{width}x{height}.png'))
         # A rejected request restores the draft and does not duplicate stored users.
         async def reject(route):

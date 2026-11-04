@@ -99,6 +99,21 @@ jobs:
             $page = Invoke-WebRequest 'http://127.0.0.1:8765/'
             if (!$page.Content.Contains('Central IA Studio')) { throw 'Frontend ausente' }
             $releaseHeaders = @{ 'X-Central-Token' = $r.token }
+            $attachmentFile = Join-Path $PWD 'work/package smoke/anexo.txt'
+            Set-Content $attachmentFile 'Arquivo de teste do EXE empacotado' -Encoding utf8
+            $releaseAttachment = Invoke-RestMethod 'http://127.0.0.1:8765/api/attachments?name=anexo.txt' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $attachmentFile
+            if ($releaseAttachment.kind -ne 'document') { throw 'Extrator de anexos do EXE falhou' }
+            $imageFile = Join-Path $PWD 'work/package smoke/imagem.png'
+            python -c "from PIL import Image; Image.new('RGB',(16,16),'red').save(r'$imageFile')"
+            if ($LASTEXITCODE -ne 0) { throw 'Fixture PNG falhou' }
+            $releaseImage = Invoke-RestMethod 'http://127.0.0.1:8765/api/attachments?name=imagem.png' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $imageFile
+            if ($releaseImage.kind -ne 'image') { throw 'Leitor de imagens do EXE falhou' }
+            $pdfFile = Join-Path $PWD 'work/package smoke/documento.pdf'
+            python -c "from pypdf import PdfWriter; w=PdfWriter(); w.add_blank_page(width=100,height=100); w.write(r'$pdfFile')"
+            if ($LASTEXITCODE -ne 0) { throw 'Fixture PDF falhou' }
+            $releasePdf = Invoke-RestMethod 'http://127.0.0.1:8765/api/attachments?name=documento.pdf' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $pdfFile
+            if ($releasePdf.kind -ne 'document') { throw 'Leitor PDF do EXE falhou' }
+            Write-Host 'Studio EXE: extracao isolada de texto, PNG e PDF passou.'
             $releaseModelDir = Join-Path $PWD 'work/package smoke/modelo de teste'
             New-Item -ItemType Directory -Force $releaseModelDir | Out-Null
             $releaseModelPath = Join-Path $releaseModelDir 'tiny.gguf'

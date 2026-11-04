@@ -53,7 +53,14 @@ class Engine:
                     r.raise_for_status()
                 caps, model, ctx = [r.json() for r in responses]
             self.kind = 'central' if caps.get('result') == 'CentralEngine' else 'koboldcpp'
-            result.update(connected=True,state='ready',kind=self.kind,capabilities=caps,model=model.get('result'),context=ctx.get('value'))
+            result.update(connected=True,state='ready',kind=self.kind,capabilities=caps,model=model.get('result'),context=ctx.get('value'),vision=False,tools=False)
+            if self.kind=='central':
+                try:
+                    props=await self.json('/props')
+                    if not isinstance(props,dict):raise ValueError('Propriedades inválidas')
+                    result['vision']=(props.get('modalities') or {}).get('vision') is True
+                    result['tools']=(props.get('chat_template_caps') or {}).get('supports_tools') is True
+                except (httpx.HTTPError,ValueError,TypeError):pass
         except (httpx.HTTPError,ValueError,KeyError) as e:
             result['error'] = 'Motor indisponível: '+str(e)
         return result
@@ -108,6 +115,7 @@ class Engine:
         if not self.request_key:
             return {'interrupted':False}
         self.cancelled = True
+        self.abort_event.set()
         if self.kind == 'central':
             self.abort_event.set()
             return {'interrupted':True,'method':'disconnect'}
@@ -127,13 +135,18 @@ class Engine:
         except (httpx.HTTPError,ValueError):
             return None
 
-    async def prepare(self, messages, profile):
+    async def prepare(self, messages, profile, tools=None):
         status = await self.status()
         if not status['connected'] or not status.get('context'):
             raise ValueError('Conecte um motor com modelo carregado antes de gerar')
         payload = {'messages':messages,'temperature':profile.temperature,'top_p':profile.top_p,
                    'top_k':profile.top_k,'min_p':profile.min_p,'rep_pen':profile.repetition_penalty,
                    'stream':True,'stream_options':{'include_usage':True}}
+        if tools:
+            payload['tools']=tools
+            payload['tool_choice']='auto'
+        if any(isinstance(m.get('content'),list) and any(p.get('type')=='image_url' for p in m['content']) for m in messages) and not status.get('vision'):
+            raise ValueError('O modelo carregado não aceita imagens. Configure um modelo de visão e seu projetor mmproj compatível, ou remova as imagens.')
         thinking = thinking_value(profile)
         support = await self.thinking_control() if thinking != 'default' else None
         warning = None

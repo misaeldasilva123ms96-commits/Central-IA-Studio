@@ -19,6 +19,18 @@ class Store:
             CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, conversation TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL, content TEXT NOT NULL, reasoning TEXT NOT NULL DEFAULT '', stats TEXT NOT NULL DEFAULT '{}');
             CREATE TABLE IF NOT EXISTS benchmarks(id TEXT PRIMARY KEY, created REAL NOT NULL, value TEXT NOT NULL);
             ''')
+            db.executescript('''
+            CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, kind TEXT NOT NULL, size INTEGER NOT NULL, text TEXT NOT NULL, data BLOB NOT NULL, vision BLOB, warning TEXT NOT NULL, sha256 TEXT NOT NULL, created REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS message_attachments(message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE, attachment_id TEXT NOT NULL REFERENCES attachments(id), PRIMARY KEY(message_id,attachment_id));
+            CREATE TABLE IF NOT EXISTS agent_revisions(id TEXT PRIMARY KEY, conversation TEXT NOT NULL, path TEXT NOT NULL, previous BLOB, after_sha TEXT NOT NULL, created REAL NOT NULL, restored INTEGER NOT NULL DEFAULT 0);
+            ''')
+            revision_columns={row[1] for row in db.execute('PRAGMA table_info(agent_revisions)')}
+            if 'restored' not in revision_columns:db.execute('ALTER TABLE agent_revisions ADD COLUMN restored INTEGER NOT NULL DEFAULT 0')
+            attachment_columns={row[1] for row in db.execute('PRAGMA table_info(attachments)')}
+            if 'vision' not in attachment_columns:db.execute('ALTER TABLE attachments ADD COLUMN vision BLOB')
+            columns={row[1] for row in db.execute('PRAGMA table_info(conversations)')}
+            if 'kind' not in columns:
+                db.execute("ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'")
             if db.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                 raise RuntimeError('Banco inconsistente. Preserve o arquivo antes de restaurar um backup.')
 
@@ -51,21 +63,32 @@ class Store:
         with self.db() as db:
             db.execute('INSERT OR REPLACE INTO profiles VALUES (?,?)',(model,json.dumps(value)))
 
-    def conversation(self, title):
+    def conversation(self, title, kind='chat'):
         cid = uuid.uuid4().hex
         with self.db() as db:
-            db.execute('INSERT INTO conversations VALUES (?,?,?)',(cid,title,time.time()))
+            db.execute('INSERT INTO conversations(id,title,created,kind) VALUES (?,?,?,?)',(cid,title,time.time(),kind))
         return cid
 
     def messages(self, cid):
         with self.db() as db:
-            return [dict(row) | {'stats':json.loads(row['stats'])} for row in db.execute('SELECT * FROM messages WHERE conversation=? ORDER BY id',(cid,))]
+            rows=[dict(row) | {'stats':json.loads(row['stats'])} for row in db.execute('SELECT * FROM messages WHERE conversation=? ORDER BY id',(cid,))]
+            for row in rows:
+                for activity in row['stats'].get('activities',[]):
+                    rid=(activity.get('result') or {}).get('revision')
+                    if rid:
+                        revision=db.execute('SELECT restored FROM agent_revisions WHERE id=?',(rid,)).fetchone()
+                        if revision:activity['result']['restored']=bool(revision[0])
+                row['attachments']=[dict(a) for a in db.execute('SELECT a.id,a.name,a.mime,a.kind,a.size,a.warning,a.sha256 FROM attachments a JOIN message_attachments m ON m.attachment_id=a.id WHERE m.message_id=?',(row['id'],))]
+            return rows
 
-    def add_message(self, cid, role, content, reasoning='', stats=None):
+    def add_message(self, cid, role, content, reasoning='', stats=None, attachments=None):
         with self.db() as db:
             cur = db.execute('INSERT INTO messages(conversation,role,content,reasoning,stats) VALUES (?,?,?,?,?)',
                              (cid,role,content,reasoning,json.dumps(stats or {},ensure_ascii=False)))
-            return cur.lastrowid
+            mid=cur.lastrowid
+            for aid in attachments or []:
+                db.execute('INSERT INTO message_attachments VALUES (?,?)',(mid,aid))
+            return mid
 
     def backup(self):
         dest = self.directory / ('backup-'+str(time.time_ns())+'.sqlite3')

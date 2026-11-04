@@ -23,7 +23,8 @@ function Code({className,children}){
   const html=React.useMemo(()=>language&&hljs.getLanguage(language)?hljs.highlight(text,{language,ignoreIllegals:true}).value:null,[text,language]);
   return html==null?<code className={className}>{children}</code>:<code className={className} dangerouslySetInnerHTML={{__html:html}}/>;
 }
-const components={pre:CodeBlock,code:Code};
+function Link({href,children}){const external=/^https?:\/\//i.test(href||'');return <a href={href} target={external?'_blank':undefined} rel={external?'noopener noreferrer':undefined}>{children}</a>;}
+const components={pre:CodeBlock,code:Code,a:Link};
 function MessageMarkdown({content,onError}){
   return <CopyErrorContext.Provider value={onError}><Markdown remarkPlugins={[remarkGfm]} components={components}>{content}</Markdown></CopyErrorContext.Provider>;
 }

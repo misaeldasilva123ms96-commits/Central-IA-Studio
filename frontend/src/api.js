@@ -14,3 +14,9 @@ export async function generate(data,onEvent){
 }
 export function download(name, value, type='application/json'){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([typeof value==='string'?value:JSON.stringify(value,null,2)],{type}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 export const bytes=n=>n==null?'Não disponível':(n/1024**3).toFixed(2)+' GB';
+
+export async function uploadFile(file){
+ const res=await fetch('/api/attachments?name='+encodeURIComponent(file.name),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Central-Token':token},body:file});
+ if(!res.ok){const error=await res.json().catch(()=>({detail:res.statusText}));throw Error(error.detail||'Não foi possível anexar o arquivo.');}
+ return res.json();
+}

@@ -1,6 +1,6 @@
 # Central IA Studio
 
-Central IA Studio 0.3.0: aplicativo de IA local em português brasileiro.
+Central IA Studio 0.4.0 em validação: aplicativo de IA local em português brasileiro.
 Interface React compilada, API Python, SQLite, Central Engine CPU incluído e
 compatibilidade com KoboldCpp externo.
 Sem Electron, Docker, Node.js em produção, telemetria ou downloads automáticos.
@@ -107,3 +107,33 @@ Os parâmetros completos incluem controles do cache do Central Engine 0.2.0.
 Consulte [a documentação do motor](engine/README.md) e
 [o relatório da atualização](docs/ATUALIZACAO_0_3_0.md). As releases anteriores
 continuam disponíveis. A publicação só ocorre após validar os pacotes da versão.
+
+## Atualização 0.4.0 em validação
+
+A interface segue a referência escolhida, com marca, textos maiores, conversa mais
+larga e ações junto às respostas. O botão **+** aceita documentos e imagens; também
+funcionam arrastar/soltar e colar imagens. Originais, vínculos e revisões ficam no
+SQLite e entram no backup. Tipos: texto/código, CSV, PDF com texto, DOCX, XLSX,
+PNG/JPEG/WebP/GIF/BMP. Até seis arquivos de 8 MiB por envio. PDFs sem texto precisam
+de OCR externo ou de páginas como imagens enviadas a um modelo de visão.
+
+**Agente**, abaixo de Conversas, tem histórico independente. Escolha o projeto e
+use **Plan** para leitura/planejamento ou **Build** para propor edições e comandos.
+As permissões ficam visíveis no compositor: **Solicitar aprovação**, **Aprovar por
+mim** e **Acesso completo**. Plan não recebe ferramentas de escrita/comandos em
+nenhuma opção. Alterações guardam a versão anterior e podem ser desfeitas pela
+interface, se o arquivo não tiver sido modificado depois.
+
+**Internet** oferece busca pública e leitura de páginas, com resultados no histórico
+de ferramentas e links para fontes. Buscas/URLs são enviadas a Bing, DuckDuckGo ou
+Jina Reader quando necessário. Arquivos anexados não são enviados automaticamente
+como arquivos a esses serviços; consultas propostas pelo modelo podem conter texto
+da conversa, por isso revise-as no modo Solicitar aprovação. O botão controla as
+ferramentas web, não uma firewall: comandos são programas reais com suas permissões
+e podem ter rede própria. A pasta do projeto não é uma sandbox.
+
+Imagens exigem um modelo de visão e seu **mmproj compatível**, configurado nos
+parâmetros e carregado pelo motor. Não basta selecionar um modelo apenas textual.
+O Studio informa a capacidade carregada e não simula reconhecimento visual.
+[Guia e limites da 0.4](docs/ATUALIZACAO_0_4_0.md). A release publicada permanece
+separada desta versão de teste até sua aprovação.

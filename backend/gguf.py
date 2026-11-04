@@ -79,7 +79,8 @@ def discover(folders):
                 item = {'path':str(path),'name':path.name,'size':path.stat().st_size}
                 try:
                     item['metadata'] = metadata(path)
-                    item['status'] = 'Metadados lidos; inferência não validada'
+                    item['projector'] = item['metadata'].get('general.architecture')=='clip'
+                    item['status'] = 'Projetor multimodal; selecione com um modelo compatível' if item['projector'] else 'Metadados lidos; inferência não validada'
                 except (ValueError,OSError,struct.error) as e:
                     item['metadata'] = {}
                     item['status'] = 'GGUF inválido ou não suportado: '+str(e)
