@@ -31,7 +31,7 @@ jobs:
         id: engine_source
         shell: pwsh
         run: |
-          $same = (git rev-parse HEAD:engine) -eq 'f8bad84222d0e23d8dcc68187283c84fe410cd4e'
+          $same = (git rev-parse HEAD:engine) -eq '569d274c6efd064a2ce9ffaed17b993e91c99a32'
           "reuse=$($same.ToString().ToLower())" >> $env:GITHUB_OUTPUT
       - name: Recuperar motor aprovado quando as fontes forem identicas
         id: engine_cache
@@ -41,12 +41,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          $approvedBuild = gh run view 41753565678 --json conclusion,headSha | ConvertFrom-Json
+          $approvedBuild = gh run view 41769219990 --json conclusion,headSha | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $approvedBuild.conclusion -ne 'success') { throw 'Build aprovado indisponivel; compilacao sera executada' }
           $approvedTree = gh api "repos/$env:GH_REPO/git/trees/$($approvedBuild.headSha)" | ConvertFrom-Json
           $approvedEngineTree = ($approvedTree.tree | Where-Object path -eq 'engine').sha
-          if ($LASTEXITCODE -ne 0 -or $approvedEngineTree -ne 'f8bad84222d0e23d8dcc68187283c84fe410cd4e') { throw 'Fontes do motor divergentes; compilacao sera executada' }
-          gh run download 41753565678 -n Central-Engine-Windows-x64-CPU -D work/engine-package
+          if ($LASTEXITCODE -ne 0 -or $approvedEngineTree -ne '569d274c6efd064a2ce9ffaed17b993e91c99a32') { throw 'Fontes do motor divergentes; compilacao sera executada' }
+          gh run download 41769219990 -n Central-Engine-Windows-x64-CPU -D work/engine-package
           if ($LASTEXITCODE -ne 0) { throw 'Motor anterior indisponivel; compilacao sera executada' }
           python -c "import hashlib; from pathlib import Path; root=Path('work/engine-package'); rows=(root/'SHA256SUMS.txt').read_text().splitlines(); assert all(hashlib.sha256((root/n).read_bytes()).hexdigest()==h for h,n in (row.split('  ',1) for row in rows))"
           if ($LASTEXITCODE -ne 0) { throw 'Hash incorreto; compilacao sera executada' }
