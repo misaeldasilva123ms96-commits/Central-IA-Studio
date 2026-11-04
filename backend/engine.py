@@ -107,6 +107,20 @@ class Engine:
             return {'interrupted':True,'method':'disconnect'}
         return await self.json('/api/extra/abort',{'genkey':self.request_key})
 
+    async def thinking_control(self):
+        if self.kind != 'central':
+            return None
+        try:
+            props = await self.json('/props')
+            template = props.get('chat_template')
+            if not isinstance(template,str):
+                return None
+            caps = props.get('chat_template_caps',{})
+            return ('enable_thinking' in template or 'reasoning_effort' in template
+                    or caps.get('supports_reasoning_effort') is True)
+        except (httpx.HTTPError,ValueError):
+            return None
+
     async def prepare(self, messages, profile):
         status = await self.status()
         if not status['connected'] or not status.get('context'):
@@ -115,11 +129,22 @@ class Engine:
                    'top_k':profile.top_k,'min_p':profile.min_p,'rep_pen':profile.repetition_penalty,
                    'stream':True,'stream_options':{'include_usage':True}}
         thinking = thinking_value(profile)
+        support = await self.thinking_control() if thinking != 'default' else None
+        warning = None
+        applied = 'default'
         if thinking != 'default':
             if not status.get('capabilities',{}).get('jinja'):
-                raise ValueError('Thinking explícito exige KoboldCpp iniciado com Jinja. O template também precisa aceitar enable_thinking.')
-            payload['chat_template_kwargs'] = {'enable_thinking':thinking == 'on'}
-            payload['reasoning_effort'] = 'none' if thinking == 'off' else 'high'
+                raise ValueError('Thinking explícito exige um motor com Jinja habilitado e template compatível.')
+            if support is False:
+                if thinking == 'on':
+                    raise ValueError('O template carregado não declara controle de thinking. Use Personalizado com Pensamento padrão ou um modelo/template compatível.')
+                warning = 'O template carregado não declara controle de thinking. A geração seguirá o padrão do modelo; o modo Rápido não garante aceleração.'
+            else:
+                payload['chat_template_kwargs'] = {'enable_thinking':thinking == 'on'}
+                payload['reasoning_effort'] = 'none' if thinking == 'off' else 'high'
+                applied = thinking
+                if support is None:
+                    warning = 'Não foi possível verificar o controle de thinking do template. Parâmetro enviado; efeito não confirmado.'
         if self.kind == 'central':
             payload['repeat_penalty'] = payload.pop('rep_pen')
         tokens = await self.json('/api/extra/tokencount',payload)
@@ -136,8 +161,8 @@ class Engine:
         payload.update(max_tokens=effective,max_context_length=context)
         return payload, {'requested_output':profile.max_output,'effective_output':effective,
                          'allocated_context':status['context'],'request_context':context,'occupied_context':occupied,
-                         'thinking_requested':thinking,'thinking_confirmed':False,
-                         'warning':'Template deve aceitar enable_thinking; efeito requer validação real.' if thinking != 'default' else None,
+                         'thinking_requested':thinking,'thinking_applied':applied,'thinking_template_control':support,'thinking_confirmed':False,
+                         'warning':warning,
                          'model':status.get('model')}
 
     async def _read_stream(self, payload):
