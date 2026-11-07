@@ -204,7 +204,7 @@ def test_imported_script_requires_build_and_approval_before_real_execution(tmp_p
     args={'id':key,'path':'scripts/run.py'}
     action=prepare_script(store,args,options)
     assert action['approval'] and not (project/'skill-output.txt').exists()
-    assert action['script_argv'][0] in action['summary'] and 'run.py' in action['summary']
+    assert json.loads(action['summary'].split(' · ',1)[1])==action['script_argv'] and 'run.py' in action['summary']
     assert not resource_definition(store,[key],'agent','plan',str(project))[0]['function']['name']=='run_skill_script'
     with pytest.raises(ValueError):prepare_script(store,args,options|{'agent_mode':'plan'})
     result=asyncio.run(run_command(action['script_argv'],action['cwd'],asyncio.Event(),action['script_env']))
