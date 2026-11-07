@@ -101,3 +101,23 @@ def test_csv_decimal_precision_and_limits():
     args['text']='Valor\n1e-1000000\n2'
     result=execute('summarize_csv',args)
     assert result['invalid']==1 and result['sum']=='2'
+
+
+def test_concurrent_changes_keep_both_updates(tmp_path,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    store=Store(tmp_path/'data');change(store,'calculator','install')
+    original=store.get;barrier=threading.Barrier(2)
+    def synchronized_read(key,default=None):
+        value=original(key,default)
+        if key=='extensions':barrier.wait(timeout=5)
+        return value
+    monkeypatch.setattr(store,'get',synchronized_read)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        disabled=pool.submit(change,store,'calculator','disable')
+        installed=pool.submit(change,store,'clock','install')
+        disabled.result(timeout=10);installed.result(timeout=10)
+    monkeypatch.setattr(store,'get',original)
+    state={item['id']:item for item in catalog(store)}
+    assert state['calculator']['installed'] and not state['calculator']['enabled']
+    assert state['clock']['installed'] and state['clock']['enabled']

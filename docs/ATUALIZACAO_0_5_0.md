@@ -12,7 +12,8 @@ O catálogo inicial contém 8 plugins e 8 habilidades mantidos pelo Central IA.
 Os pacotes são incluídos no aplicativo; instalar registra e ativa o item localmente,
 sem baixar ou executar código de terceiros. Não é uma loja de extensões remotas.
 Há pesquisa, categorias, filtro de instalados, detalhes, instalação, ativação,
-desativação e remoção reversível. O estado fica no SQLite e entra no backup.
+desativação e remoção reversível. O estado fica no SQLite e entra no backup. Alterações usam uma transação
+serializada para preservar atualizações simultâneas de extensões diferentes.
 
 Os quatro plugins correspondentes aos recursos existentes vêm instalados e ativos
 para preservar o comportamento anterior: internet, documentos, arquivos do projeto

@@ -1,5 +1,7 @@
 """Bundled extension catalog and persisted installation state; never downloads code."""
 
+import json
+
 PLUGINS=[
  ('web','Pesquisa na internet','Busca pública e leitura de páginas. Requer Internet ativada.','Pesquisa',['web_search','web_fetch'],True),
  ('documents','Leitura de documentos','Consulta trechos e busca em documentos anexados à conversa.','Documentos',['read_attachment','search_attachment'],True),
@@ -22,8 +24,8 @@ SKILLS=[
 ]
 
 
-def catalog(store):
-    state=store.get('extensions',{})
+def catalog(store,state=None):
+    if state is None:state=store.get('extensions',{})
     result=[]
     for key,name,description,category,tools,default in PLUGINS:
         saved=state.get(key,{'installed':default,'enabled':default})
@@ -35,15 +37,20 @@ def catalog(store):
 
 
 def change(store,key,action):
-    item=next((i for i in catalog(store) if i['id']==key),None)
-    if not item:raise ValueError('Extensão não encontrada.')
-    if action=='install':status={'installed':True,'enabled':True}
-    elif action=='remove':status={'installed':False,'enabled':False}
-    elif action in ['enable','disable']:
-        if not item['installed']:raise ValueError('Instale a extensão primeiro.')
-        status={'installed':True,'enabled':action=='enable'}
-    else:raise ValueError('Ação desconhecida.')
-    state=store.get('extensions',{});state[key]=status;store.put('extensions',state)
+    with store.db() as db:
+        db.execute('BEGIN IMMEDIATE')
+        row=db.execute("SELECT value FROM settings WHERE key='extensions'").fetchone()
+        state=json.loads(row['value']) if row else {}
+        item=next((i for i in catalog(store,state) if i['id']==key),None)
+        if not item:raise ValueError('Extensão não encontrada.')
+        if action=='install':status={'installed':True,'enabled':True}
+        elif action=='remove':status={'installed':False,'enabled':False}
+        elif action in ['enable','disable']:
+            if not item['installed']:raise ValueError('Instale a extensão primeiro.')
+            status={'installed':True,'enabled':action=='enable'}
+        else:raise ValueError('Ação desconhecida.')
+        state[key]=status
+        db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',('extensions',json.dumps(state,ensure_ascii=False)))
     return catalog(store)
 
 
