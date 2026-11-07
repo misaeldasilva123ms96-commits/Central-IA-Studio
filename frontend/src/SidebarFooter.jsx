@@ -1,0 +1,8 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {Settings,Sun,Moon,ChevronUp} from 'lucide-react';
+export default function SidebarFooter({engine,light,onTheme,onSettings}){
+ const [open,setOpen]=useState(false),root=useRef(),trigger=useRef();
+ useEffect(()=>{if(!open)return;const close=e=>{if(!root.current?.contains(e.target))setOpen(false);};const escape=e=>{if(e.key==='Escape'){setOpen(false);trigger.current?.focus();}};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};},[open]);
+ const status=engine.connected?(engine.kind==='central'?'Local · Central Engine':'Local · KoboldCpp'):'Local · Neste computador';
+ return <div className="sidebar-foot" ref={root}>{open&&<div className="sidebar-settings-menu" role="menu" aria-label="Ajustes do Central IA"><p>Central IA Studio <small>v0.4.0 · Execução local</small></p><button role="menuitem" onClick={()=>{setOpen(false);onSettings();}}><Settings size={17}/>Configurações</button><button role="menuitem" onClick={()=>{onTheme();setOpen(false);}}>{light?<Moon size={17}/>:<Sun size={17}/>}Usar tema {light?'escuro':'claro'}</button></div>}<button className="sidebar-account" ref={trigger} aria-label="Abrir ajustes do Central IA" aria-haspopup="menu" aria-expanded={open} onClick={()=>setOpen(!open)}><img src="/central-mark.png" alt=""/><span><strong>Central IA Studio</strong><small><i className="dot"/>{status}</small></span><ChevronUp size={16}/></button></div>;
+}

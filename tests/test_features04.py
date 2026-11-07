@@ -351,3 +351,16 @@ def test_stop_disconnects_waiting_stream_for_both_engines(tmp_path,kind):
         assert closed.is_set()
         assert keys==(['active-key'] if kind=='koboldcpp' else [])
     asyncio.run(check())
+
+
+@pytest.mark.parametrize('access',['ask','auto','full'])
+@pytest.mark.parametrize('kind',['chat','agent'])
+@pytest.mark.parametrize('name,args',[
+    ('web_search',{'query':'Python documentação'}),
+    ('web_fetch',{'url':'https://example.com'}),
+])
+def test_internet_toggle_authorizes_web_without_extra_approval(access,kind,name,args):
+    action=prepare_action(name,args,kind,'plan','',True,access)
+    assert not action['approval']
+    with pytest.raises(ValueError,match='não disponível'):
+        prepare_action(name,args,kind,'plan','',False,access)

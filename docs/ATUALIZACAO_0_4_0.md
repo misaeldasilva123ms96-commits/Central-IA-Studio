@@ -43,7 +43,7 @@ backend à lista de ferramentas e a cada chamada, não apenas por instrução ao
 
 | Opção | Comportamento |
 | --- | --- |
-| Solicitar aprovação (padrão) | Confirma escrita, comandos, arquivos fora do projeto/sensíveis e cada busca/leitura web. Anexos fornecidos e leitura comum no projeto dispensam nova confirmação. |
+| Solicitar aprovação (padrão) | Confirma escrita, comandos, arquivos fora do projeto/sensíveis. Internet habilitada dispensa confirmação adicional. Anexos fornecidos e leitura comum no projeto dispensam nova confirmação. |
 | Aprovar por mim | Autoriza leitura, internet e escrita comum no projeto. Comandos, caminhos externos, pastas de sistema e arquivos sensíveis detectados por regras ainda pedem aprovação. |
 | Acesso completo | Autoriza as ferramentas disponíveis sem confirmação, inclusive arquivos fora do projeto e comandos no Build, com as permissões do usuário do Windows. |
 
@@ -84,8 +84,8 @@ um leitor público remoto, após validar o destino público. O domínio pode ser
 por DNS-over-HTTPS do Google quando o resolvedor local não está disponível. Esses
 serviços recebem a consulta/domínio/URL solicitada; não recebem automaticamente os
 BLOBs dos anexos. Resultados informam a origem/provedor e são tratados como dados
-não confiáveis. O modelo pode incluir texto da conversa nas consultas: o modo Ask
-permite revisar esse envio; Auto/Full concedem a autorização definida acima.
+não confiáveis. O modelo pode incluir texto da conversa nas consultas: ativar o botão Internet
+autoriza buscas e leituras web em todos os níveis, sem uma segunda confirmação.
 
 Resposta web limitada a 1 MiB; trecho enviado ao modelo limitado a 14.000 caracteres.
 Provedores gratuitos podem bloquear, exigir CAPTCHA ou ficar indisponíveis. A falha
@@ -100,7 +100,7 @@ posterior do seletor de permissões. O logotipo PNG foi gerado a partir da marca
 conceito e usado no produto, sem imitar o logotipo de terceiros.
 
 Em 1586×992: sidebar 292 px, cabeçalho 72 px, conteúdo 22 px, código 17 px,
-marca 48 px, coluna de conversa até 1120 px. Fundos #212121/#171717/#303030;
+marca 30 px, coluna de conversa até 1120 px. Fundos #212121/#171717/#303030;
 balões à direita, respostas abertas, logo junto da resposta, ações inline abaixo,
 compositor inferior largo. Controles avançados e exportação ficam em Ajustes,
 preservando o espaço do chat. Telas menores usam tipografia reduzida e menu lateral
@@ -155,3 +155,16 @@ A cópia acima da dobra foi conferida: novos controles são os pedidos pelo usu�
 nome do modelo/conversa e tempo vêm do teste, sem reproduzir métricas inventadas do
 conceito. Desvios intencionais são os registrados acima. Capturas:
 [prévias 0.4](previews/v0.4.0/README.md). Os checks da PR registram a validação Windows.
+
+### Ajustes após teste do usuário
+
+Navegação compacta no topo da lateral; Nova conversa/tarefa, busca e histórico
+ficam abaixo. Botões e histórico compartilham uma única área rolável, sem rolagem
+interna que comprima as conversas. Marca compacta e rodapé permanecem fora dessa área. Configurações e troca de
+tema ficam no menu fixo do rodapé, inspirado na organização do ChatGPT.
+O botão Internet autoriza busca/leitura web, inclusive em Solicitar aprovação;
+desativá-lo remove essas ferramentas. Edições e comandos mantêm sua política.
+A suíte integrada agora cobre 64 casos, incluindo as combinações de ferramentas web,
+modo Conversa/Agente e níveis de permissão. O roteiro de navegador inclui histórico
+longo e comprova que a rolagem move navegação e conversas juntas. A busca desse
+roteiro usa provedor simulado identificado; não depende de rede pública no CI.
