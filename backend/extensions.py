@@ -31,7 +31,7 @@ def catalog(store,state=None):
         saved=state.get(key,{'installed':default,'enabled':default})
         result.append(dict(id=key,name=name,description=description,category=category,kind='plugin',tools=tools,version='1.0.0',author='Central IA',bundled=True,**saved))
     for key,name,description,category,prompt in SKILLS:
-        saved=state.get(key,{'installed':False,'enabled':False})
+        saved=dict(state.get(key,{'installed':False,'enabled':False}));saved.setdefault('automatic',True)
         result.append(dict(id=key,name=name,description=description,category=category,kind='skill',instructions=prompt,tools=[],version='1.0.0',author='Central IA',bundled=True,**saved))
     with store.db() as db:
         imported=[dict(row) for row in db.execute('SELECT * FROM imported_extensions ORDER BY name')]
@@ -42,7 +42,7 @@ def catalog(store,state=None):
         root=row['root'].rstrip('/')
         parent_inactive=bool(row['parent'] and (not parent['installed'] or not parent['enabled']))
         resources=[file['path'][len(root)+1:] if root!='.' else file['path'] for file in files if file['package']==(row['parent'] or row['id']) and (root=='.' or file['path'].startswith(root+'/'))]
-        result.append(dict(id=row['id'],name=row['name'],description=row['description'],kind=row['kind'],version=row['version'],instructions=row['instructions'],tools=[],category='Importados',author='Pacote importado',bundled=False,parent=row['parent'],implicit=bool(row['implicit']),parent_inactive=parent_inactive,root=row['root'],resources=resources,installed=saved['installed'] and parent['installed'],enabled=saved['enabled'] and parent['enabled'] and parent['installed']))
+        result.append(dict(id=row['id'],name=row['name'],description=row['description'],kind=row['kind'],version=row['version'],instructions=row['instructions'],tools=[],category='Importados',author='Pacote importado',bundled=False,parent=row['parent'],automatic=saved.get('automatic',True),implicit=bool(row['implicit']),parent_inactive=parent_inactive,root=row['root'],resources=resources,installed=saved['installed'] and parent['installed'],enabled=saved['enabled'] and parent['enabled'] and parent['installed']))
     return result
 
 
@@ -54,11 +54,15 @@ def change(store,key,action):
         item=next((i for i in catalog(store,state) if i['id']==key),None)
         if not item:raise ValueError('Extensão não encontrada.')
         if item.get('parent_inactive') and action in ['install','enable']:raise ValueError('Ative o plugin de origem antes de ativar esta habilidade.')
-        if action=='install':status={'installed':True,'enabled':True}
-        elif action=='remove':status={'installed':False,'enabled':False}
+        previous=state.get(key,{})
+        if action=='install':status=previous|{'installed':True,'enabled':True}
+        elif action=='remove':status=previous|{'installed':False,'enabled':False}
         elif action in ['enable','disable']:
             if not item['installed']:raise ValueError('Instale a extensão primeiro.')
-            status={'installed':True,'enabled':action=='enable'}
+            status=previous|{'installed':True,'enabled':action=='enable'}
+        elif action in ['auto_enable','auto_disable']:
+            if item['kind']!='skill' or not item['installed']:raise ValueError('Uso automático requer uma habilidade instalada.')
+            status=previous|{'installed':item['installed'],'enabled':item['enabled'],'automatic':action=='auto_enable'}
         else:raise ValueError('Ação desconhecida.')
         state[key]=status
         db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',('extensions',json.dumps(state,ensure_ascii=False)))
@@ -101,8 +105,8 @@ def resource_definition(store,ids,kind='chat',mode='build',workspace=''):
 
 
 def automatic_skills(store,selected,enabled):
-    if not enabled or len(selected)>=3:return []
-    return [item for item in catalog(store) if item['kind']=='skill' and item['installed'] and item['enabled'] and item['id'] not in selected and item.get('implicit',True)][:16]
+    if not enabled or not store.get('skill_automation',{'enabled':True}).get('enabled',True) or len(selected)>=3:return []
+    return [item for item in catalog(store) if item['kind']=='skill' and item['installed'] and item['enabled'] and item['id'] not in selected and item.get('automatic',True)][:16]
 
 
 def automatic_context(messages,items):

@@ -63,8 +63,6 @@ no compositor, comprova resultado real 30 e instruções no pedido, recarrega a 
 consulta catálogo/pesquisa e verifica navegação, rodapé, temas e telas menores.
 Não é benchmark de qualidade de um modelo treinado, nem teste de loja externa.
 
-Resultado local: 77 testes integrados e os três roteiros Chromium passaram,
-incluindo regressões de chat/cópia, E2E de limites/benchmark e o catálogo novo.
 
 ## Formatos externos e funcionamento no estilo Codex
 
@@ -97,9 +95,11 @@ no SQLite e no backup; cópias de trabalho são materializadas na pasta privada 
 
 Com a seleção automática ligada no compositor, o modelo recebe nomes/descrições de
 até 16 habilidades instaladas e pode usar load_skill quando uma for relevante. O
-conteúdo é carregado sob demanda, sem executar código. A política de opt-out em
-agents/openai.yaml é respeitada; habilidades com opt-out ainda podem ser escolhidas
-manualmente. Há limite conjunto de três habilidades por tarefa.
+conteúdo é carregado sob demanda, sem executar código. O campo allow_implicit_invocation do pacote é preservado como recomendação.
+Conforme a preferência do usuário, o automático começa ligado: o controle geral e o
+controle individual no catálogo têm precedência, inclusive para pacotes que recomendam
+uso manual. Ambos são salvos no banco e podem ser desativados; seleção manual continua
+disponível. A conversa também tem um controle próprio de automático. Há limite conjunto de três habilidades por tarefa.
 
 A carga automática retorna até 4.000 caracteres de instruções, informa truncamento
 e permite consultar o SKILL.md completo por trechos com read_skill_resource. Recursos
@@ -159,6 +159,12 @@ Referências de formato consultadas:
 - https://developers.openai.com/plugins/build/plugins
 - https://developers.openai.com/codex/mcp/
 
-Resultado local após a compatibilidade externa: 99 testes integrados passaram,
+Resultado local final: 100 testes integrados passaram,
 além dos roteiros de navegador. STDIO e HTTP autenticado foram exercitados contra
 servidores locais reais; o exemplo distribuído foi importado e retornou soma 42.
+
+O controle geral de automático fica em Plugins e Habilidades, e cada habilidade tem
+seu próprio controle de Uso automático. Ambos ficam ligados por padrão para itens
+instalados/ativos. A recomendação allow_implicit_invocation:false do pacote é
+mostrada, mas não impede o usuário de autorizar o automático. Desligar o automático
+não desinstala a habilidade nem impede a seleção manual.

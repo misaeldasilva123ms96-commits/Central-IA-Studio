@@ -17,3 +17,7 @@ a fixture não representa qualidade de um modelo treinado.
 
 As novas capturas usam um servidor MCP local real de teste, com consentimento
 antes da conexão e da chamada. O modelo HTTP continua sendo uma fixture explícita.
+
+O catálogo mostra os controles geral e individual de uso automático. A habilidade
+importada da captura recomenda uso manual, mas o automático foi autorizado pela
+configuração do usuário e exercitado no roteiro.

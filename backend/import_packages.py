@@ -129,6 +129,7 @@ def read_package(data,name):
                             servers.setdefault(label,{'transport':dependency.get('transport','streamable_http'),'url':dependency['url']})
                         else:warnings.append('Dependência MCP '+label+' requer configuração própria em Conexões MCP.')
     if len(servers)>8:raise ValueError('Pacote limitado a 8 servidores MCP.')
+    if any(not skill['implicit'] for skill in skills):warnings.append('O pacote recomenda uso manual. No Central IA, o controle de uso automático definido por você prevalece.')
     # Parse and validate connections before storing anything. No connection is started here.
     from .mcp_bridge import validate_config
     connections=[]

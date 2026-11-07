@@ -121,3 +121,25 @@ def test_concurrent_changes_keep_both_updates(tmp_path,monkeypatch):
     state={item['id']:item for item in catalog(store)}
     assert state['calculator']['installed'] and not state['calculator']['enabled']
     assert state['clock']['installed'] and state['clock']['enabled']
+
+
+
+def test_global_and_per_skill_automatic_settings_persist(client):
+    from backend.extensions import automatic_skills
+    client.patch('/api/extensions/writing',json={'action':'install'})
+    assert client.get('/api/extensions/automation').json()['enabled']
+    assert client.put('/api/extensions/automation',json={'enabled':False}).status_code==200
+    assert not automatic_skills(client.app.state.store,[],True)
+    client.put('/api/extensions/automation',json={'enabled':True})
+    assert [i['id'] for i in automatic_skills(client.app.state.store,[],True)]==['writing']
+    assert client.patch('/api/extensions/writing',json={'action':'auto_disable'}).status_code==200
+    assert not automatic_skills(client.app.state.store,[],True)
+    items=client.get('/api/extensions').json()['items']
+    item=next(i for i in items if i['id']=='writing')
+    assert item['installed'] and item['enabled'] and not item['automatic']
+    assert apply_skills(client.app.state.store,[{'role':'user','content':'x'}],['writing'])
+    client.patch('/api/extensions/writing',json={'action':'disable'})
+    client.patch('/api/extensions/writing',json={'action':'enable'})
+    assert not automatic_skills(client.app.state.store,[],True)
+    client.patch('/api/extensions/writing',json={'action':'auto_enable'})
+    assert automatic_skills(client.app.state.store,[],True)

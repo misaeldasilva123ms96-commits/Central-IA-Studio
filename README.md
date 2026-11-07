@@ -156,7 +156,7 @@ Plugins ativos continuam sujeitos a Internet, Plan/Build e às permissões escol
 
 A atualização também importa **SKILL.md** e ZIPs nos layouts **plugin.json** portátil
 ou **.codex-plugin/plugin.json** legado. Habilidades podem ser carregadas pelo modelo
-sob demanda, respeitando a política de seleção automática do pacote. Referências
+sob demanda, com controles geral e individual em Plugins e Habilidades. Referências
 são lidas por trechos; scripts exigem Agente Build e a aprovação correspondente.
 
 Em **Conexões MCP**, cadastre STDIO ou Streamable HTTP, autorize a conexão e escolha

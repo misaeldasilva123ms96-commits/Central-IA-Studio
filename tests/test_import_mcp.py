@@ -186,7 +186,10 @@ def test_implicit_policy_and_skill_dependencies_are_imported(tmp_path):
     store=Store(tmp_path/'data');doc=read_package(out.getvalue(),'skill.zip');key=install_package(store,doc)
     from backend.extensions import automatic_skills
     assert not next(i for i in catalog(store) if i['id']==key)['implicit']
-    assert not automatic_skills(store,[],True)
+    assert any(i['id']==key for i in automatic_skills(store,[],True))
+    change(store,key,'auto_disable');assert not automatic_skills(store,[],True)
+    change(store,key,'auto_enable');assert automatic_skills(store,[],True)
+    store.put('skill_automation',{'enabled':False});assert not automatic_skills(store,[],True)
     assert apply_skills(store,[{'role':'user','content':'x'}],[key])
     assert MCPBridge(store).servers()[0]['config']['url']=='https://example.com/mcp'
 

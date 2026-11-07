@@ -57,7 +57,10 @@ class GenerateInput(BaseModel):
     workspace: str = Field('',max_length=4096)
 
 class ExtensionInput(BaseModel):
-    action: Literal['install','enable','disable','remove']
+    action: Literal['install','enable','disable','remove','auto_enable','auto_disable']
+
+class AutomationInput(BaseModel):
+    enabled: bool
 
 class MCPConfigInput(BaseModel):
     name: str
@@ -154,7 +157,7 @@ def create_app(data_dir=None):
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.5.0','extensions':catalog(store)}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.5.0','extensions':catalog(store),'skill_automation':store.get('skill_automation',{'enabled':True})}
 
     @app.put('/api/settings')
     def settings(value: Settings):
@@ -327,6 +330,15 @@ def create_app(data_dir=None):
     @app.get('/api/extensions')
     def extensions_catalog():
         return {'items':catalog(store)}
+
+    @app.get('/api/extensions/automation')
+    def automation_settings():return store.get('skill_automation',{'enabled':True})
+
+    @app.put('/api/extensions/automation')
+    async def set_automation(value: AutomationInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para alterar a seleção automática.')
+        async with engine.generation_lock:store.put('skill_automation',value.model_dump())
+        return value.model_dump()
 
     @app.patch('/api/extensions/{key}')
     async def update_extension(key: str,value: ExtensionInput):
