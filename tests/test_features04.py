@@ -164,7 +164,7 @@ def test_agent_loop_waits_for_consent_and_records_real_result(client,fake_engine
         if data['messages'][-1]['role']=='tool':
             chunks=[{'choices':[{'delta':{'content':'Tarefa concluída.'},'finish_reason':'stop'}]}]
         else:
-            chunks=[{'choices':[{'delta':{'tool_calls':[{'index':0,'id':'call-write','type':'function','function':{'name':'write_file','arguments':json.dumps({'path':'novo.txt','content':'conteudo aprovado'})}}]},'finish_reason':'tool_calls'}]}]
+            chunks=[{'choices':[{'delta':{'content':'Vou criar o arquivo.\n\n','tool_calls':[{'index':0,'id':'call-write','type':'function','function':{'name':'write_file','arguments':json.dumps({'path':'novo.txt','content':'conteudo aprovado'})}}]},'finish_reason':'tool_calls'}]}]
         chunks.append({'choices':[],'usage':{'prompt_tokens':40,'completion_tokens':8}})
         for chunk in chunks:self.wfile.write(('data: '+json.dumps(chunk)+'\n\n').encode());self.wfile.flush()
         self.wfile.write(b'data: [DONE]\n\n')
@@ -189,6 +189,12 @@ def test_agent_loop_waits_for_consent_and_records_real_result(client,fake_engine
         messages=client.get('/api/conversations/'+cid).json()
         assert messages[-1]['stats']['activities'][0]['status']==('done' if allow else 'denied')
         assert messages[-1]['stats']['generated_tokens']==16
+        sequence=messages[-1]['stats']['timeline']
+        assert [b['type'] for b in sequence]==['text','activity','text']
+        assert sequence[0]['content'].startswith('Vou criar o arquivo.')
+        assert sequence[1]['id']==messages[-1]['stats']['activities'][0]['id']
+        assert sequence[2]['content']=='Tarefa concluída.'
+        assert ''.join(b['content'] for b in sequence if b['type']=='text')==messages[-1]['content']
         assert 'Tarefa concluída.' in messages[-1]['content']
         assert not client.get('/api/conversations').json()
         assert client.get('/api/conversations?kind=agent').json()[0]['id']==cid

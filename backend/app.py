@@ -379,11 +379,13 @@ def create_app(data_dir=None):
             content, reasoning, finish, usage = '', '', None, {}
             timings = {}
             activities = {}
+            timeline = []
             error = None
             try:
                 yield sse('limits',limits)
                 async for event,chunk in run_turn(engine,store,approvals,value.conversation,messages,value.profile,payload,tool_defs,native_tools,tool_options):
                     if event=='activity':
+                        if chunk['id'] not in activities:timeline.append({'type':'activity','id':chunk['id']})
                         activities[chunk['id']]=chunk
                         yield sse('activity',chunk)
                         continue
@@ -406,6 +408,9 @@ def create_app(data_dir=None):
                         if c or r:
                             first = first or time.perf_counter()
                             content += c
+                            if c:
+                                if timeline and timeline[-1]['type']=='text':timeline[-1]['content']+=c
+                                else:timeline.append({'type':'text','content':c})
                             reasoning += r
                             yield sse('delta',{'content':c,'reasoning':r})
                         finish = choice.get('finish_reason') or finish
@@ -431,7 +436,7 @@ def create_app(data_dir=None):
                     'elapsed':elapsed,'ttft':first-start_time if first else None,
                     'tokens_per_second':count/elapsed if count is not None and elapsed else None,
                     'truncated':finish=='length','error':error,'backend_timings':timings,
-                    'engine_kind':engine.kind,'profile':value.profile.model_dump(),'activities':list(activities.values()),'session':options}
+                    'engine_kind':engine.kind,'profile':value.profile.model_dump(),'activities':list(activities.values()),'timeline':timeline,'session':options}
                 try:
                     store.add_message(value.conversation,'assistant',content,reasoning,stats)
                     if value.benchmark:

@@ -5,6 +5,7 @@ modelo, documentos sintéticos e ferramentas reais sobre pasta temporária. Nenh
 texto ou tempo da fixture é benchmark ou resposta de um modelo treinado.
 
 - [Conversa na resolução da referência (1586×992)](conversa.png)
+- [Texto e ferramentas na ordem da execução](agente-sequencia.png)
 - [Build aguardando aprovação de edição](agente-build.png)
 - [As três opções de permissões](permissoes.png)
 - [Anexos por seleção e drag/drop](anexos.png)
