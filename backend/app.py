@@ -310,9 +310,10 @@ def create_app(data_dir=None):
         return {'items':catalog(store)}
 
     @app.patch('/api/extensions/{key}')
-    def update_extension(key: str,value: ExtensionInput):
+    async def update_extension(key: str,value: ExtensionInput):
         if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de alterar extensões.')
-        return {'items':change_extension(store,key,value.action)}
+        async with engine.generation_lock:
+            return {'items':await asyncio.to_thread(change_extension,store,key,value.action)}
 
     @app.post('/api/generate')
     async def generate(value: GenerateInput, request: Request):
