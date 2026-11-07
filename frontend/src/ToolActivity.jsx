@@ -2,7 +2,7 @@ import React,{useState} from 'react';
 import {Globe,FileText,Folder,Terminal,FilePenLine,Check,LoaderCircle,ShieldAlert} from 'lucide-react';
 import {api} from './api';
 import Dialog from './Dialog';
-const labels={read_attachment:['Ler anexo',FileText],search_attachment:['Buscar no anexo',FileText],web_search:['Buscar na internet',Globe],web_fetch:['Ler página',Globe],read_file:['Ler arquivo',FileText],list_files:['Listar arquivos',Folder],write_file:['Editar arquivo',FilePenLine],run_command:['Executar comando',Terminal]};
+const labels={calculate:['Calcular',FileText],format_json:['Validar JSON',FileText],summarize_csv:['Analisar CSV',FileText],current_datetime:['Consultar data e hora',FileText],read_attachment:['Ler anexo',FileText],search_attachment:['Buscar no anexo',FileText],web_search:['Buscar na internet',Globe],web_fetch:['Ler página',Globe],read_file:['Ler arquivo',FileText],list_files:['Listar arquivos',Folder],write_file:['Editar arquivo',FilePenLine],run_command:['Executar comando',Terminal]};
 function Activity({item,notify,canUndo}){
  const [answering,setAnswering]=useState(false),[undo,setUndo]=useState(false),[restored,setRestored]=useState(false);
  const [label,Icon]=labels[item.name]||[item.name,FileText];

@@ -1,6 +1,6 @@
 # Central IA Studio
 
-Central IA Studio 0.4.0 em validação: aplicativo de IA local em português brasileiro.
+Central IA Studio 0.5.0 em validação: aplicativo de IA local em português brasileiro.
 Interface React compilada, API Python, SQLite, Central Engine CPU incluído e
 compatibilidade com KoboldCpp externo.
 Sem Electron, Docker, Node.js em produção, telemetria ou downloads automáticos.
@@ -138,3 +138,17 @@ parâmetros e carregado pelo motor. Não basta selecionar um modelo apenas textu
 O Studio informa a capacidade carregada e não simula reconhecimento visual.
 [Guia e limites da 0.4](docs/ATUALIZACAO_0_4_0.md). A release publicada permanece
 separada desta versão de teste até sua aprovação.
+
+
+## Plugins e Habilidades — atualização 0.5
+
+A navegação principal reúne Conversas, Agente e **Plugins e Habilidades**. Modelos,
+Parâmetros, Benchmarks, Monitoramento, Configurações e tema ficam no menu do rodapé.
+
+O marketplace local inicial traz **8 plugins e 8 habilidades**. Os itens vêm no app;
+instalar registra e ativa a extensão no computador, sem baixar código de terceiros.
+Use pesquisa/categorias e o filtro de instalados para gerenciar o conjunto. Depois de
+instalar uma habilidade, escolha até três no compositor da conversa ou do agente.
+Plugins ativos continuam sujeitos a Internet, Plan/Build e às permissões escolhidas.
+
+[Catálogo, comportamento e limites](docs/ATUALIZACAO_0_5_0.md).

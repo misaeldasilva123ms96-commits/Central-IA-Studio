@@ -78,7 +78,8 @@ async def check(port,directory):
         # Same Markdown (GFM tables) during streaming and after persistence.
         await expect(page.locator('.chat-host:not([hidden]) .messages table')).to_have_count(1)
         assert handler.payloads[-1][1]['messages'][0]['content']==custom
-        await page.get_by_role('button',name='Parâmetros',exact=True).click()
+        await page.get_by_role('button',name='Abrir ajustes do Central IA',exact=True).click()
+        await page.get_by_role('menuitem',name='Parâmetros',exact=True).click()
         await page.get_by_role('button',name='Conversas',exact=True).click()
         await expect(page.get_by_role('button',name='Interromper',exact=True)).to_be_visible()
         await expect(page.locator('.message.user')).to_contain_text(text)
@@ -143,7 +144,8 @@ async def check(port,directory):
         # New history management and local directory chooser exercise real API.
         await page.set_viewport_size({'width':1440,'height':900})
         await page.get_by_role('button',name='Fechar aviso').click()
-        await page.get_by_role('button',name='Modelos',exact=True).click()
+        await page.get_by_role('button',name='Abrir ajustes do Central IA',exact=True).click()
+        await page.get_by_role('menuitem',name='Modelos',exact=True).click()
         await page.get_by_role('textbox',name='Pasta com modelos (GGUF)',exact=True).fill(directory)
         await page.get_by_role('button',name='Selecionar pasta',exact=True).click()
         picker=page.get_by_role('dialog',name='Selecionar pasta de modelos')
@@ -204,9 +206,11 @@ async def check(port,directory):
         await page.get_by_role('button',name='Excluir Conversa renomeada').click()
         await page.get_by_role('dialog').get_by_role('button',name='Excluir conversa',exact=True).click()
         await expect(page.locator('.history-row')).to_have_count(0)
-        await page.get_by_role('button',name='Ativar tema claro').click()
+        await page.get_by_role('button',name='Abrir ajustes do Central IA',exact=True).click()
+        await page.get_by_role('menuitem',name='Usar tema claro',exact=True).click()
         await page.screenshot(path=str(out/'empty-light.png'))
-        await page.get_by_role('button',name='Ativar tema escuro').click()
+        await page.get_by_role('button',name='Abrir ajustes do Central IA',exact=True).click()
+        await page.get_by_role('menuitem',name='Usar tema escuro',exact=True).click()
         # Keep a readable preview of the real interface with explicitly synthetic content.
         await page.unroute('**/api/generate',reject)
         await page.get_by_role('textbox',name='Mensagem',exact=True).fill('Como somar os valores dos fornecedores sem considerar os negativos?')

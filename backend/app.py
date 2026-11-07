@@ -26,6 +26,7 @@ from .folders import browse_folders
 from .generation_stats import DEFAULT_SYSTEM_PROMPT,backend_timings,estimate_seconds
 from .attachments import MAX_FILE,extract,public_attachment,model_message
 from .agent_tools import ApprovalBroker,definitions
+from .extensions import catalog,change as change_extension,tools_for,apply_skills
 from .turns import configure_messages,run_turn
 from .revisions import undo_revision
 
@@ -44,11 +45,15 @@ class GenerateInput(BaseModel):
     action: str = 'send'
     benchmark: bool = False
     attachments: list[str] = Field(default_factory=list,max_length=6)
+    skills: list[str] = Field(default_factory=list,max_length=3)
     kind: Literal['chat','agent'] = 'chat'
     agent_mode: Literal['build','plan'] = 'build'
     access: Literal['ask','auto','full'] = 'ask'
     internet: bool = False
     workspace: str = Field('',max_length=4096)
+
+class ExtensionInput(BaseModel):
+    action: Literal['install','enable','disable','remove']
 
 class StartInput(BaseModel):
     path: str
@@ -130,7 +135,7 @@ def create_app(data_dir=None):
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.4.0'}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.5.0','extensions':catalog(store)}
 
     @app.put('/api/settings')
     def settings(value: Settings):
@@ -300,6 +305,15 @@ def create_app(data_dir=None):
             return Response(body,media_type='text/markdown',headers={'Content-Disposition':'attachment; filename="conversa.md"'})
         return Response(json.dumps(messages,ensure_ascii=False,indent=2),media_type='application/json',headers={'Content-Disposition':'attachment; filename="conversa.json"'})
 
+    @app.get('/api/extensions')
+    def extensions_catalog():
+        return {'items':catalog(store)}
+
+    @app.patch('/api/extensions/{key}')
+    def update_extension(key: str,value: ExtensionInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de alterar extensões.')
+        return {'items':change_extension(store,key,value.action)}
+
     @app.post('/api/generate')
     async def generate(value: GenerateInput, request: Request):
         ensure_conversation(value.conversation)
@@ -341,10 +355,11 @@ def create_app(data_dir=None):
                 if image_count+sum(a['kind']=='image' for a in selected_attachments)>8:
                     raise ValueError('Esta conversa excederia oito imagens. Use uma nova conversa.')
                 messages.append(model_message(store,{'role':'user','content':value.content,'attachments':selected_attachments}))
-            options={k:getattr(value,k) for k in ['kind','agent_mode','access','internet','workspace']}
+            options={k:getattr(value,k) for k in ['kind','agent_mode','access','internet','workspace','skills']}
             document_ids=list(dict.fromkeys(a['id'] for m in history for a in m.get('attachments',[]) if a['kind']=='document'))
             if value.action=='send':document_ids+= [a['id'] for a in selected_attachments if a['kind']=='document' and a['id'] not in document_ids]
-            tool_defs=definitions(value.kind,value.agent_mode,value.workspace,value.internet,bool(document_ids))
+            messages=apply_skills(store,messages,value.skills)
+            tool_defs=tools_for(store,definitions(value.kind,value.agent_mode,value.workspace,value.internet,bool(document_ids)))
             tool_options=options | {'attachment_ids':document_ids}
             native_tools=(await engine.status()).get('tools') is True if tool_defs else False
             messages=configure_messages(messages,tool_defs,native_tools,value.agent_mode if value.kind=='agent' else 'conversa')

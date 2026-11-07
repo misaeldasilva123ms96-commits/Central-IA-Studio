@@ -7,12 +7,13 @@ import Composer from './Composer';
 import Dialog from './Dialog';
 import {ArrowDown,Download,SlidersHorizontal,Paperclip} from 'lucide-react';
 import {api,generate,uploadFile} from './api';
-export default function Chat({engine,profile,notify,onConfigure,onModels,onNavigate,historyHost,benchmark=false,onStats,defaultSystemPrompt,active=true,kind='chat',onBusy,otherBusy=false,toolsHost}){
+export default function Chat({engine,profile,notify,onConfigure,onModels,onNavigate,historyHost,benchmark=false,onStats,defaultSystemPrompt,active=true,kind='chat',onBusy,otherBusy=false,toolsHost,extensions=[],onExtensions}){
  const [conversations,setConversations]=useState([]),[cid,setCid]=useState(''),[messages,setMessages]=useState([]),[text,setText]=useState(''),[system,setSystem]=useState(defaultSystemPrompt),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[live,setLive]=useState(null),[limits,setLimits]=useState(null),[away,setAway]=useState(false),[editing,setEditing]=useState(null),[saving,setSaving]=useState(false),[historyLoading,setHistoryLoading]=useState(false),[historyError,setHistoryError]=useState(false),[historyVersion,setHistoryVersion]=useState(0);
- const [items,setItemsState]=useState([]),[agentMode,setAgentMode]=useState('build'),[access,setAccess]=useState('ask'),[internet,setInternet]=useState(false),[workspace,setWorkspace]=useState(''),[dragging,setDragging]=useState(false);
+ const [items,setItemsState]=useState([]),[agentMode,setAgentMode]=useState('build'),[access,setAccess]=useState('ask'),[internet,setInternet]=useState(false),[workspace,setWorkspace]=useState(''),[dragging,setDragging]=useState(false),[skills,setSkills]=useState([]);
  const messageArea=useRef(),created=useRef(null),sending=useRef(false),follow=useRef(true),composer=useRef(),dragDepth=useRef(0),drafts=useRef({}),activeRef=useRef(active),itemsRef=useRef([]);
  const setItems=useCallback(value=>{const next=typeof value==='function'?value(itemsRef.current):value;itemsRef.current=next;setItemsState(next);},[]);
  activeRef.current=active;
+ useEffect(()=>{setSkills(previous=>{const next=previous.filter(id=>extensions.some(i=>i.id===id&&i.installed&&i.enabled));return next.length===previous.length?previous:next;});},[extensions,skills.join('|')]);
  const listPath='/conversations?kind='+kind+'&q='+encodeURIComponent(query);
  useEffect(()=>{const copy=e=>copyChatSelection(e,messageArea.current);document.addEventListener('copy',copy);return()=>document.removeEventListener('copy',copy);},[]);
  const refresh=async()=>setConversations(await api(listPath));
@@ -22,13 +23,13 @@ export default function Chat({engine,profile,notify,onConfigure,onModels,onNavig
    if(cid&&created.current===cid){created.current=null;setHistoryLoading(false);return;}
    if(cid){
      setMessages([]);setHistoryLoading(true);
-     Promise.all([api('/conversations/'+cid),api('/system-prompt/'+cid)]).then(([rows,prompt])=>{if(current){setMessages(rows);setSystem(prompt.content);const o=prompt.options||{};setAgentMode(o.agent_mode||'build');setAccess(o.access||'ask');setInternet(Boolean(o.internet));setWorkspace(o.workspace||'');}}).catch(e=>{if(current){setHistoryError(true);notify(e.message,true);}}).finally(()=>{if(current)setHistoryLoading(false);});
+     Promise.all([api('/conversations/'+cid),api('/system-prompt/'+cid)]).then(([rows,prompt])=>{if(current){setMessages(rows);setSystem(prompt.content);const o=prompt.options||{};setAgentMode(o.agent_mode||'build');setAccess(o.access||'ask');setInternet(Boolean(o.internet));setWorkspace(o.workspace||'');setSkills(o.skills||[]);}}).catch(e=>{if(current){setHistoryError(true);notify(e.message,true);}}).finally(()=>{if(current)setHistoryLoading(false);});
    }else{setMessages([]);setSystem(defaultSystemPrompt);setHistoryLoading(false);}
    return()=>{current=false;};
  },[cid,defaultSystemPrompt,historyVersion]);
  useEffect(()=>{const area=messageArea.current;if(active&&area&&follow.current)area.scrollTop=area.scrollHeight;},[live,messages,active]);
  const selectConversation=id=>{if(itemsRef.current.some(i=>i.uploading))return;drafts.current[cid||'new']={text,items};const draft=drafts.current[id]||{text:'',items:[]};setText(draft.text);setItems(draft.items);setCid(id);setHistoryVersion(n=>n+1);onNavigate?.();};
- const newConversation=()=>{if(sending.current||itemsRef.current.some(i=>i.uploading))return;drafts.current[cid||'new']={text,items};setCid('');setMessages([]);setText('');setItems([]);setAccess('ask');setInternet(false);setSystem(defaultSystemPrompt);setLimits(null);follow.current=true;onNavigate?.();composer.current?.focus();};
+ const newConversation=()=>{if(sending.current||itemsRef.current.some(i=>i.uploading))return;drafts.current[cid||'new']={text,items};setCid('');setMessages([]);setText('');setItems([]);setAccess('ask');setInternet(false);setSkills([]);setSystem(defaultSystemPrompt);setLimits(null);follow.current=true;onNavigate?.();composer.current?.focus();};
  useEffect(()=>{const shortcut=e=>{if(!historyHost||document.querySelector('dialog[open]'))return;if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='o'){e.preventDefault();newConversation();}};window.addEventListener('keydown',shortcut);return()=>window.removeEventListener('keydown',shortcut);},[historyHost,busy,text,items,defaultSystemPrompt]);
  const addFiles=async files=>{
    if(busy||otherBusy||historyLoading)return;
@@ -44,7 +45,7 @@ export default function Chat({engine,profile,notify,onConfigure,onModels,onNavig
    if(action==='send'){setMessages(v=>[...v,{id:'pending-user-'+Date.now(),role:'user',content:text,attachments:sentItems,stats:{}}]);setText('');setItems([]);}
    setBusy(true);onBusy?.(kind);setLive({content:'',reasoning:'',activities:[],timeline:[]});setLimits(null);
    let currentId=cid;
-   try{currentId=cid||await create();delete drafts.current[currentId];await generate({conversation:currentId,content:text,system,profile,action,benchmark,attachments:sentItems.map(a=>a.id),kind,agent_mode:agentMode,access,internet,workspace},(event,data)=>{
+   try{currentId=cid||await create();delete drafts.current[currentId];await generate({conversation:currentId,content:text,system,profile,action,benchmark,attachments:sentItems.map(a=>a.id),kind,agent_mode:agentMode,access,internet,workspace,skills},(event,data)=>{
      if(event==='limits')setLimits(data);
      if(event==='delta')setLive(v=>{const timeline=[...(v?.timeline||[])];if(data.content){const previous=timeline.at(-1);if(previous?.type==='text')timeline[timeline.length-1]={...previous,content:previous.content+data.content};else timeline.push({type:'text',content:data.content});}return {...v,content:(v?.content||'')+(data.content||''),reasoning:(v?.reasoning||'')+(data.reasoning||''),timeline};});
      if(event==='activity'){setLive(v=>{const known=v?.activities?.some(a=>a.id===data.id);return {...v,activities:known?v.activities.map(a=>a.id===data.id?data:a):[...(v?.activities||[]),data],timeline:known?v.timeline:[...(v?.timeline||[]),{type:'activity',id:data.id}]};});if(data.status==='approval'&&!activeRef.current)notify((kind==='agent'?'Agente':'Conversa')+' aguarda sua aprovação.');}
@@ -69,7 +70,7 @@ export default function Chat({engine,profile,notify,onConfigure,onModels,onNavig
  {live&&<MessageItem message={{...live,role:'assistant'}} notify={notify} busy live/>}</div></div>
  <div className="composer-area">{away&&<button className="jump-latest" aria-label="Ir para a última mensagem" onClick={()=>{follow.current=true;messageArea.current.scrollTop=messageArea.current.scrollHeight;setAway(false);}}><ArrowDown size={18}/></button>}
  {limits&&<details className="limits"><summary>Contexto e limites{limits.warning&&' · Atenção'}</summary>Solicitado: {limits.requested_output} · Efetivo enviado: {limits.effective_output} · Contexto: {limits.occupied_context} / {limits.request_context} · Alocado: {limits.allocated_context}{limits.estimated_seconds!=null&&` · Estimativa para gerar TODO o limite: ${limits.estimated_seconds.toFixed(1)} s`}{limits.warning&&<p>{limits.warning}</p>}</details>}
- <Composer {...{text,setText,items,setItems,engine,kind,agentMode,setAgentMode,access,setAccess,internet,setInternet,workspace,setWorkspace,notify}} inputRef={composer} busy={busy} disabled={historyLoading||historyError||otherBusy} onFiles={addFiles} onSend={()=>run()}/></div>
+ <Composer {...{text,setText,items,setItems,engine,kind,agentMode,setAgentMode,access,setAccess,internet,setInternet,workspace,setWorkspace,notify,extensions,skills,setSkills,onExtensions}} inputRef={composer} busy={busy} disabled={historyLoading||historyError||otherBusy} onFiles={addFiles} onSend={()=>run()}/></div>
  {editing&&<Dialog title={editing.type==='rename'?'Renomear conversa':editing.type==='delete'?'Excluir conversa':'Editar mensagem'} onClose={()=>{if(!saving)setEditing(null);}}>{editing.type==='delete'?<p>Excluir “{editing.target.title}” e suas mensagens/anexos? Esta ação não pode ser desfeita.</p>:<label className="field"><span>{editing.type==='rename'?'Título':'Conteúdo'}</span>{editing.type==='rename'?<input autoFocus maxLength={200} value={editing.value} onChange={e=>setEditing({...editing,value:e.target.value})}/>:<textarea autoFocus value={editing.value} onChange={e=>setEditing({...editing,value:e.target.value})}/>}</label>}<div className="dialog-actions"><button disabled={saving} onClick={()=>setEditing(null)}>Cancelar</button><button className={editing.type==='delete'?'danger':'primary'} disabled={saving||(editing.type==='rename'&&!editing.value.trim())} onClick={saveEdit}>{editing.type==='delete'?'Excluir conversa':'Salvar'}</button></div></Dialog>}
  </div>;
 }

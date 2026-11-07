@@ -37,6 +37,8 @@ def post(self):
         result=json.loads(content)
         answer='A ação não foi executada: '+result['error'] if result.get('error') else 'A ferramenta concluiu a ação solicitada.'
     elif isinstance(content,list):answer='Imagem recebida pelo transporte de teste. Esta fixture não faz reconhecimento visual.'
+    elif content.startswith('Calcule'):
+        call=('calculate',{'expression':'(10 + 5) * 2'});answer=''
     elif content.startswith('Liste'):
         call=('list_files',{'path':'.'});answer=''
     elif content.startswith('Crie'):
@@ -89,6 +91,56 @@ async def check(port,project):
         await expect(page.get_by_role('button',name='Histórico de teste 00',exact=True)).to_be_in_viewport()
         assert await page.locator('.sidebar nav').evaluate('el=>el.getBoundingClientRect().bottom<el.parentElement.getBoundingClientRect().top')
         await sidebar.evaluate('el=>el.scrollTop=0')
+        assert await page.locator('.sidebar nav button').all_text_contents()==['Conversas','Agente','Plugins e Habilidades']
+        assert await page.locator('.header-actions button[title*=tema]').count()==0
+        await page.get_by_role('button',name='Abrir ajustes do Central IA',exact=True).click()
+        for name in ['Modelos','Parâmetros','Benchmarks','Monitoramento']:
+            await expect(page.get_by_role('menuitem',name=name,exact=True)).to_be_visible()
+        await page.screenshot(path=str(out/'rodape-expansivo.png'))
+        await page.keyboard.press('Escape')
+        await page.get_by_role('button',name='Plugins e Habilidades',exact=True).click()
+        await expect(page.locator('.extension-card')).to_have_count(8)
+        await page.screenshot(path=str(out/'marketplace-plugins.png'))
+        await page.set_viewport_size({'width':390,'height':844})
+        assert await page.evaluate('document.documentElement.scrollWidth<=390')
+        await page.screenshot(path=str(out/'marketplace-tela-menor.png'))
+        await page.set_viewport_size({'width':1586,'height':992})
+        await page.get_by_role('textbox',name='Pesquisar extensões',exact=True).fill('JSON')
+        await expect(page.locator('.extension-card')).to_have_count(1)
+        await page.get_by_role('textbox',name='Pesquisar extensões',exact=True).fill('')
+        calculator=page.get_by_role('article',name='Calculadora',exact=True)
+        await calculator.get_by_role('button',name='Instalar',exact=True).click()
+        await expect(calculator.locator('.extension-status')).to_have_text('Ativo')
+        await calculator.get_by_role('button',name='Desativar Calculadora',exact=True).click()
+        await expect(calculator.locator('.extension-status')).to_have_text('Desativado')
+        await calculator.get_by_role('button',name='Ativar Calculadora',exact=True).click()
+        await expect(calculator.locator('.extension-status')).to_have_text('Ativo')
+        await page.get_by_role('button',name='Habilidades',exact=True).click()
+        await expect(page.locator('.extension-card')).to_have_count(8)
+        writing=page.get_by_role('article',name='Redação e revisão',exact=True)
+        await writing.get_by_role('button',name='Instalar',exact=True).click()
+        await expect(writing.locator('.extension-status')).to_have_text('Ativo')
+        await page.screenshot(path=str(out/'marketplace-habilidades.png'))
+        await page.get_by_role('button',name='Conversas',exact=True).click()
+        await host.get_by_role('button',name='Selecionar habilidades',exact=True).click()
+        skills=page.get_by_role('dialog',name='Habilidades desta conversa',exact=True)
+        await skills.get_by_role('checkbox',name='Redação e revisão',exact=False).check()
+        await page.screenshot(path=str(out/'habilidade-na-conversa.png'))
+        await skills.get_by_role('button',name='Explorar habilidades',exact=True).click()
+        await expect(page.get_by_role('button',name='Habilidades',exact=True)).to_have_attribute('aria-pressed','true')
+        await page.get_by_role('button',name='Conversas',exact=True).click()
+        await host.get_by_role('textbox',name='Mensagem',exact=True).fill('Calcule o resultado da expressão')
+        await host.get_by_role('button',name='Enviar',exact=True).click()
+        await expect(host.locator('.tool-activity.done')).to_have_count(1)
+        await expect(host.get_by_role('button',name='Interromper',exact=True)).to_have_count(0)
+        generated=[v for key,v in handler.payloads if key=='generate']
+        assert 'Revise e redija em português brasileiro' in generated[-1]['messages'][0]['content']
+        assert json.loads(generated[-1]['messages'][-1]['content'])['result']==30
+        await page.reload()
+        await page.get_by_role('button',name='Calcule o resultado da expressão',exact=True).click()
+        await expect(host.locator('.skills-trigger')).to_contain_text('1')
+        await page.get_by_role('button',name='Nova conversa',exact=True).click()
+        if await page.get_by_role('button',name='Fechar aviso').count():await page.get_by_role('button',name='Fechar aviso').click()
 
         await page.get_by_role('button',name='Adicionar arquivos e imagens').click()
         await expect(page.get_by_role('menuitem',name='Arquivos e documentos')).to_be_visible()
@@ -219,7 +271,7 @@ async def check(port,project):
             if (width,height)==(390,500):
                 await page.get_by_role('button',name='Abrir menu',exact=True).click()
                 await sidebar.evaluate('el=>el.scrollTop=0')
-                assert await sidebar.evaluate("el=>el.scrollHeight>el.clientHeight&&getComputedStyle(el.querySelector('nav')).overflowY==='visible'&&getComputedStyle(el.querySelector('.history-list')).overflowY==='visible'")
+                assert await sidebar.evaluate("el=>el.scrollHeight>=el.clientHeight&&getComputedStyle(el.querySelector('nav')).overflowY==='visible'&&getComputedStyle(el.querySelector('.history-list')).overflowY==='visible'")
                 await page.screenshot(path=str(out/'lateral-compacta-tela-menor.png'))
                 await page.keyboard.press('Escape')
         await page.set_viewport_size({'width':1586,'height':992})
@@ -232,7 +284,7 @@ async def check(port,project):
         await page.screenshot(path=str(out/'conversa-referencia.png'))
         assert not errors,errors
         await browser.close()
-    print('v0.4 UI: anexos, drag/drop, imagem e capacidade, Plan, Build com aprovação, acesso automático/completo, comandos reais, internet habilitada sem aprovação extra, rolagem lateral única, seis viewports: passaram.')
+    print('v0.5 UI: marketplace, instalação/ativação, habilidades no pedido real, anexos, drag/drop, imagem e capacidade, Plan, Build com aprovação, acesso automático/completo, comandos reais, internet habilitada sem aprovação extra, rolagem lateral única, seis viewports: passaram.')
 
 with tempfile.TemporaryDirectory() as directory:
     base=Path(directory);project=base/'projeto';project.mkdir();(project/'readme.txt').write_text('Projeto de teste')

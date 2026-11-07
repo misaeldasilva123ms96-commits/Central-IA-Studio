@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.4.0 — em validação
+## 0.5.0 — em validação
+
+Modelos, Parâmetros, Benchmarks e Monitoramento no menu do rodapé; tema sem
+duplicação no topo. Marketplace local de 8 plugins e 8 habilidades, com instalação,
+ativação/remoção persistidas e seleção de habilidades no compositor. Ferramentas
+opcionais de aritmética, JSON, CSV e data/hora; chamadas filtradas no backend sem
+alterar as permissões. As instruções escolhidas entram na preparação real do pedido.
+
+## 0.4.0 — Anexos, Agente e internet
 
 Anexos por botão +, arrastar/soltar e colar, com originais no banco e extração local
 limitada de documentos. Consulta de trechos/busca em anexos para não colocar todo

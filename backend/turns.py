@@ -79,6 +79,7 @@ async def run_turn(engine,store,broker,cid,messages,profile,payload,tools,native
             if calls_used>12:raise ValueError('Limite de 12 ferramentas por tarefa atingido. Revise o resultado e envie uma nova solicitação.')
             function=call['function'];aid=None;allowed=None;activity={'id':uuid.uuid4().hex,'tool_call_id':call['id'],'name':function['name'],'status':'running'}
             try:
+                if function['name'] not in {t['function']['name'] for t in tools}:raise ValueError('Ferramenta não instalada, desativada ou indisponível nesta tarefa.')
                 arguments=json.loads(function['arguments'])
                 action=await asyncio.to_thread(prepare_action,function['name'],arguments,options['kind'],options['agent_mode'],options['workspace'],options['internet'],options['access'],options.get('attachment_ids',[]))
                 activity.update(public_action(action))
