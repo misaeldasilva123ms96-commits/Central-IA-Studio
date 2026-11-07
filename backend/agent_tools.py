@@ -83,7 +83,7 @@ def prepare_action(name,args,kind,mode,workspace,internet,access,attachment_ids=
     elif name in ['web_search','web_fetch']:
         value=args['query' if name=='web_search' else 'url']
         if not isinstance(value,str) or not value or len(value)>(400 if name=='web_search' else 2048):raise ValueError('Busca ou URL inválida.')
-        action['summary']=value
+        action.update(summary=value,approval=False)
         action['preview']='Esta busca ou URL será enviada a serviços públicos de pesquisa/leitura (Bing, DuckDuckGo ou Jina Reader, quando necessário). Anexos não são enviados automaticamente.'
     elif name=='run_command':
         argv=args['argv']

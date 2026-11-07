@@ -128,7 +128,8 @@ interface, se o arquivo não tiver sido modificado depois.
 de ferramentas e links para fontes. Buscas/URLs são enviadas a Bing, DuckDuckGo ou
 Jina Reader quando necessário. Arquivos anexados não são enviados automaticamente
 como arquivos a esses serviços; consultas propostas pelo modelo podem conter texto
-da conversa, por isso revise-as no modo Solicitar aprovação. O botão controla as
+da conversa. Ativar Internet autoriza buscas e leituras sem confirmação adicional,
+inclusive em Solicitar aprovação. Desativar remove essas ferramentas. O botão controla as
 ferramentas web, não uma firewall: comandos são programas reais com suas permissões
 e podem ter rede própria. A pasta do projeto não é uma sandbox.
 

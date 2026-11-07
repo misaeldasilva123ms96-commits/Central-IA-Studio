@@ -73,6 +73,23 @@ async def check(port,project):
         host=page.locator('.chat-host:not([hidden])')
         await expect(page.get_by_text('Conectado',exact=True)).to_be_visible()
         assert await page.locator('.brand>img').evaluate('(i)=>i.naturalWidth>0')
+        await page.get_by_role('button',name='Abrir ajustes do Central IA',exact=True).click()
+        await expect(page.get_by_role('menuitem',name='Configurações',exact=True)).to_be_visible()
+        await page.keyboard.press('Escape')
+        await expect(page.get_by_role('menu',name='Ajustes do Central IA')).to_have_count(0)
+        await page.get_by_role('button',name='Abrir ajustes do Central IA',exact=True).click()
+        await page.get_by_role('menuitem',name='Configurações',exact=True).click()
+        await expect(page.get_by_role('heading',name='Configurações',exact=True)).to_be_visible()
+        await page.get_by_role('button',name='Conversas',exact=True).click()
+        await expect(page.locator('.sidebar .history-title')).to_have_count(35)
+        sidebar=page.locator('.sidebar-scroll')
+        assert await sidebar.evaluate("el=>{const nav=el.querySelector('nav').getBoundingClientRect();const history=el.querySelector('.sidebar-history').getBoundingClientRect();return nav.bottom<=history.top&&getComputedStyle(el.querySelector('.history-list')).overflowY==='visible'&&el.scrollHeight>el.clientHeight;}")
+        assert await page.locator('.sidebar nav button').first.evaluate("el=>el.getBoundingClientRect().height<=38")
+        await sidebar.evaluate('el=>el.scrollTop=el.scrollHeight')
+        await expect(page.get_by_role('button',name='Histórico de teste 00',exact=True)).to_be_in_viewport()
+        assert await page.locator('.sidebar nav').evaluate('el=>el.getBoundingClientRect().bottom<el.parentElement.getBoundingClientRect().top')
+        await sidebar.evaluate('el=>el.scrollTop=0')
+
         await page.get_by_role('button',name='Adicionar arquivos e imagens').click()
         await expect(page.get_by_role('menuitem',name='Arquivos e documentos')).to_be_visible()
         await page.keyboard.press('Escape')
@@ -178,15 +195,20 @@ async def check(port,project):
         await host.get_by_role('button',name='Internet',exact=True).click()
         await host.get_by_role('textbox',name='Mensagem',exact=True).fill('Pesquise a documentação de Python')
         await host.get_by_role('button',name='Enviar',exact=True).click()
-        await expect(approval).to_be_visible()
-        await approval.get_by_role('button',name='Negar',exact=True).click()
-        await expect(host.get_by_role('button',name='Interromper',exact=True)).to_have_count(0)
-        await expect(host.locator('.tool-activity.denied')).to_have_count(1)
+        await expect(host.get_by_role('button',name='Interromper',exact=True)).to_have_count(0,timeout=20000)
+        await expect(approval).to_have_count(0)
+        await expect(host.locator('.tool-activity.done').filter(has_text='Buscar na internet')).to_have_count(1)
         for width,height in [(1586,992),(1366,768),(1024,600),(390,844),(390,500),(844,390)]:
             await page.set_viewport_size({'width':width,'height':height})
             bounds=await page.evaluate("""()=>{const c=document.querySelector('.chat-host:not([hidden]) .composer').getBoundingClientRect();return {w:document.documentElement.scrollWidth,h:document.documentElement.scrollHeight,bottom:c.bottom};}""")
             assert bounds['w']<=width and bounds['h']<=height+1 and bounds['bottom']<=height+1,bounds
             await page.screenshot(path=str(out/f'agente-{width}x{height}.png'))
+            if (width,height)==(390,500):
+                await page.get_by_role('button',name='Abrir menu',exact=True).click()
+                await sidebar.evaluate('el=>el.scrollTop=0')
+                assert await sidebar.evaluate("el=>el.scrollHeight>el.clientHeight&&getComputedStyle(el.querySelector('nav')).overflowY==='visible'&&getComputedStyle(el.querySelector('.history-list')).overflowY==='visible'")
+                await page.screenshot(path=str(out/'lateral-compacta-tela-menor.png'))
+                await page.keyboard.press('Escape')
         await page.set_viewport_size({'width':1586,'height':992})
         await page.get_by_role('button',name='Conversas',exact=True).click()
         await page.get_by_role('button',name='Nova conversa',exact=True).click()
@@ -197,14 +219,16 @@ async def check(port,project):
         await page.screenshot(path=str(out/'conversa-referencia.png'))
         assert not errors,errors
         await browser.close()
-    print('v0.4 UI: anexos, drag/drop, imagem e capacidade, Plan, Build com aprovação, acesso automático/completo, comandos reais, internet negada, seis viewports: passaram.')
+    print('v0.4 UI: anexos, drag/drop, imagem e capacidade, Plan, Build com aprovação, acesso automático/completo, comandos reais, internet habilitada sem aprovação extra, rolagem lateral única, seis viewports: passaram.')
 
 with tempfile.TemporaryDirectory() as directory:
     base=Path(directory);project=base/'projeto';project.mkdir();(project/'readme.txt').write_text('Projeto de teste')
     store=Store(base/'data');store.put('settings',{'engine_url':url,'executable':'','folders':[]})
+    for index in range(35):store.conversation(f'Histórico de teste {index:02d}','chat')
     with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
     log=(ROOT/'work/features04-server.log').open('w')
-    process=subprocess.Popen([sys.executable,'run.py','--no-browser','--port',str(port),'--data-dir',str(base/'data')],stdout=log,stderr=log)
+    fixture_bootstrap="import runpy;import backend.agent_tools as t\nasync def search(query):return {'provider':'fixture de busca','results':[{'title':'Python fixture','url':'https://www.python.org/'}]}\nt.search_web=search\nrunpy.run_path('run.py',run_name='__main__')"
+    process=subprocess.Popen([sys.executable,'-c',fixture_bootstrap,'--no-browser','--port',str(port),'--data-dir',str(base/'data')],stdout=log,stderr=log)
     try:
         for _ in range(100):
             try:urllib.request.urlopen(f'http://127.0.0.1:{port}/api/bootstrap',timeout=.3);break

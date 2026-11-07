@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState,useLayoutEffect} from 'react';
 import {createPortal} from 'react-dom';
 import {Hand,ShieldCheck,ShieldAlert,Check} from 'lucide-react';
 export const accessOptions=[
- ['ask','Solicitar aprovação','Confirmar edições, comandos, acesso fora do projeto e uso da internet.',Hand],
+ ['ask','Solicitar aprovação','Confirmar edições, comandos e acesso fora do projeto. Internet é controlada pelo botão de ativação.',Hand],
  ['auto','Aprovar por mim','Permitir leitura, internet e edições comuns no projeto. Comandos e itens sensíveis pedem confirmação.',ShieldCheck],
  ['full','Acesso completo','Usar as ferramentas sem confirmação. No Agente Build, inclui comandos e arquivos fora do projeto, com suas permissões. Comandos também podem usar rede própria.',ShieldAlert]
 ];
