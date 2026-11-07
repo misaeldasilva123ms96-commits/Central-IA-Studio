@@ -31,7 +31,10 @@ jobs:
         id: engine_source
         shell: pwsh
         run: |
-          $same = (git rev-parse HEAD:engine) -eq '569d274c6efd064a2ce9ffaed17b993e91c99a32'
+          # The second immutable tree only adapts the tiny Studio smoke fixture
+          # to preinstalled extensions. CMake, C++ and all build/package scripts
+          # are identical to the approved tree; any other tree forces a rebuild.
+          $same = (git rev-parse HEAD:engine) -in @('569d274c6efd064a2ce9ffaed17b993e91c99a32','af6a8fecca0582bc0b33b535fc57f5c2075a890f')
           "reuse=$($same.ToString().ToLower())" >> $env:GITHUB_OUTPUT
       - name: Recuperar motor aprovado quando as fontes forem identicas
         id: engine_cache
