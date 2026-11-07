@@ -168,3 +168,9 @@ A suíte integrada agora cobre 64 casos, incluindo as combinações de ferrament
 modo Conversa/Agente e níveis de permissão. O roteiro de navegador inclui histórico
 longo e comprova que a rolagem move navegação e conversas juntas. A busca desse
 roteiro usa provedor simulado identificado; não depende de rede pública no CI.
+
+As novas respostas do agente guardam a sequência de texto e ferramentas no SQLite.
+Cada comando/chamada aparece no ponto em que ocorreu, com atualizações de estado
+no mesmo lugar, tanto ao vivo quanto ao reabrir a conversa. Não há uma lista final
+separada duplicando as ações. Respostas antigas sem sequência mantêm a apresentação
+anterior. Editar o texto de uma resposta não reaproveita posições incompatíveis.

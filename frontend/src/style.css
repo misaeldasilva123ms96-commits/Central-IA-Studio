@@ -71,3 +71,8 @@ header{height:72px;min-height:72px;padding:0 24px}.heading{gap:18px}.model-switc
 .sidebar-settings-menu>p{font-size:13px;margin:0 0 6px;padding:8px;border-bottom:1px solid var(--line);color:var(--text)}
 .sidebar-settings-menu>p small{display:block;font-size:11px}
 .sidebar-settings-menu>button{width:100%;justify-content:flex-start;border:0;padding:10px 8px;font-size:13px}
+
+.message-timeline{display:flex;flex-direction:column;gap:14px;min-width:0}
+.timeline-text{min-width:0}.timeline-text>:last-child{margin-bottom:0}
+.timeline-tool .tool-activities{margin:0}
+.message .timeline-text>p{font-size:inherit;line-height:1.65}

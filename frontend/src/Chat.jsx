@@ -42,12 +42,12 @@ export default function Chat({engine,profile,notify,onConfigure,onModels,onNavig
    sending.current=true;follow.current=true;setAway(false);
    const sentItems=action==='send'?items:[];
    if(action==='send'){setMessages(v=>[...v,{id:'pending-user-'+Date.now(),role:'user',content:text,attachments:sentItems,stats:{}}]);setText('');setItems([]);}
-   setBusy(true);onBusy?.(kind);setLive({content:'',reasoning:'',activities:[]});setLimits(null);
+   setBusy(true);onBusy?.(kind);setLive({content:'',reasoning:'',activities:[],timeline:[]});setLimits(null);
    let currentId=cid;
    try{currentId=cid||await create();delete drafts.current[currentId];await generate({conversation:currentId,content:text,system,profile,action,benchmark,attachments:sentItems.map(a=>a.id),kind,agent_mode:agentMode,access,internet,workspace},(event,data)=>{
      if(event==='limits')setLimits(data);
-     if(event==='delta')setLive(v=>({...v,content:(v?.content||'')+(data.content||''),reasoning:(v?.reasoning||'')+(data.reasoning||'')}));
-     if(event==='activity'){setLive(v=>({...v,activities:[...(v?.activities||[]).filter(a=>a.id!==data.id),data]}));if(data.status==='approval'&&!activeRef.current)notify((kind==='agent'?'Agente':'Conversa')+' aguarda sua aprovação.');}
+     if(event==='delta')setLive(v=>{const timeline=[...(v?.timeline||[])];if(data.content){const previous=timeline.at(-1);if(previous?.type==='text')timeline[timeline.length-1]={...previous,content:previous.content+data.content};else timeline.push({type:'text',content:data.content});}return {...v,content:(v?.content||'')+(data.content||''),reasoning:(v?.reasoning||'')+(data.reasoning||''),timeline};});
+     if(event==='activity'){setLive(v=>{const known=v?.activities?.some(a=>a.id===data.id);return {...v,activities:known?v.activities.map(a=>a.id===data.id?data:a):[...(v?.activities||[]),data],timeline:known?v.timeline:[...(v?.timeline||[]),{type:'activity',id:data.id}]};});if(data.status==='approval'&&!activeRef.current)notify((kind==='agent'?'Agente':'Conversa')+' aguarda sua aprovação.');}
      if(event==='error')notify(data.detail,true);
      if(event==='done'){onStats?.(data);if(data.truncated)notify('A resposta atingiu o limite de saída. Você pode continuar a geração.');}
    });}

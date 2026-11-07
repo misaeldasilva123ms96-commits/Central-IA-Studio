@@ -52,7 +52,7 @@ def post(self):
     chunks=[]
     if call:
         name,args=call
-        chunks=[{'choices':[{'delta':{'tool_calls':[{'index':0,'id':'call-fixture','type':'function','function':{'name':name,'arguments':json.dumps(args)}}]},'finish_reason':'tool_calls'}]}]
+        chunks=[{'choices':[{'delta':{'content':'Vou executar esta etapa.\n\n','tool_calls':[{'index':0,'id':'call-fixture','type':'function','function':{'name':name,'arguments':json.dumps(args)}}]},'finish_reason':'tool_calls'}]}]
     else:
         chunks=[{'choices':[{'delta':{'content':answer},'finish_reason':'stop'}]}]
     chunks.append({'choices':[],'usage':{'prompt_tokens':40,'completion_tokens':20}})
@@ -125,7 +125,7 @@ async def check(port,project):
         await expect(host.get_by_text('O modelo carregado não informou suporte a visão.',exact=False)).to_be_visible()
         await expect(host.get_by_role('button',name='Enviar',exact=True)).to_be_disabled()
         handler.vision=True
-        await expect(host.locator('.attachment-warning')).to_have_count(0,timeout=12000)
+        await expect(host.locator('.attachment-warning')).to_have_count(0,timeout=30000) # asynchronous metrics polling
         await expect(host.get_by_role('button',name='Enviar',exact=True)).to_be_enabled()
         await host.get_by_role('button',name='Enviar',exact=True).click()
         await expect(host.locator('.message.assistant:not(.live)')).to_have_count(1)
@@ -143,6 +143,7 @@ async def check(port,project):
         picker=page.get_by_role('dialog',name='Selecionar pasta do projeto')
         await picker.get_by_role('textbox',name='Caminho da pasta').fill(str(project))
         await picker.get_by_role('button',name='Abrir caminho').click()
+        await expect(picker.locator('.directory-list')).to_have_attribute('aria-label','Pastas em '+str(project))
         await expect(picker.get_by_role('button',name='readme.txt',exact=True)).to_have_count(0) # directories only
         await picker.get_by_role('button',name='Usar esta pasta',exact=True).click()
         await host.get_by_role('combobox',name='Modo do agente').select_option('plan')
@@ -159,12 +160,24 @@ async def check(port,project):
         await host.get_by_role('button',name='Enviar',exact=True).click()
         approval=host.get_by_role('region',name='Aprovação pendente')
         await expect(approval).to_be_visible()
+        assert await host.locator('.live [data-timeline-kind]').evaluate_all("els=>els.map(el=>el.dataset.timelineKind)")==['text','activity']
         assert not (project/'novo.txt').exists()
         await expect(approval).to_contain_text('Conteúdo criado pelo teste')
         await page.screenshot(path=str(out/'agente-build-aprovacao.png'))
         await approval.get_by_role('button',name='Permitir uma vez',exact=True).click()
         await expect(host.get_by_role('button',name='Interromper',exact=True)).to_have_count(0)
         assert (project/'novo.txt').read_text()=='Conteúdo criado pelo teste de integração.\n'
+        sequence=host.locator('.message.assistant:not(.live)').last.locator('[data-timeline-kind]')
+        assert await sequence.evaluate_all("els=>els.map(el=>el.dataset.timelineKind)")==['text','activity','text']
+        await page.reload()
+        host=page.locator('.chat-host:not([hidden])')
+        await page.get_by_role('button',name='Agente',exact=True).click()
+        await page.get_by_role('button',name='Crie um arquivo novo.txt',exact=True).click()
+        sequence=host.locator('.message.assistant:not(.live)').last.locator('[data-timeline-kind]')
+        await expect(sequence).to_have_count(3)
+        assert await sequence.evaluate_all("els=>els.map(el=>el.dataset.timelineKind)")==['text','activity','text']
+
+        await page.screenshot(path=str(out/'agente-sequencia.png'))
         edited=host.locator('.tool-activity.done').filter(has_text='Editar arquivo').last
         await edited.locator('summary').click()
         await edited.get_by_role('button',name='Desfazer alteração',exact=True).click()
