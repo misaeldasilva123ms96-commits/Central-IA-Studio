@@ -7,7 +7,7 @@ import re
 import time
 from urllib.parse import quote, urlsplit
 from pathlib import PurePosixPath
-from zipfile import ZipFile, ZIP_DEFLATED
+from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 import httpx
 from .import_packages import read_package, skill_document, safe_path, MAX_EXPANDED, MAX_UPLOAD
 
@@ -103,7 +103,9 @@ class OnlineCatalog:
                     data=await self.fetch(client,'https://raw.githubusercontent.com/'+item['repository']+'/'+item['commit']+'/'+quote(file['path'],safe='/'),2*1024*1024)
                     total+=len(data)
                     if total>MAX_EXPANDED:raise ValueError('Pacote expandido excede 20 MiB.')
-                    archive.writestr(path,data)
+                    entry=ZipInfo(path);entry.compress_type=ZIP_DEFLATED
+                    entry.external_attr=(0o100700 if file['mode']=='100755' else 0o100600)<<16
+                    archive.writestr(entry,data)
         data=output.getvalue()
         if len(data)>MAX_UPLOAD:raise ValueError('Pacote comprimido excede 8 MiB.')
         package=read_package(data,'online.zip');package['source']=item['url']

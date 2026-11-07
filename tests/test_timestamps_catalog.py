@@ -71,7 +71,7 @@ def fake_github(monkeypatch):
     skill=b'---\nname: Example skill\ndescription: A real package fixture\n---\nRead references/guide.md when needed.'
     async def fetch(self,client,url,limit):
         if '/commits/' in url:return json.dumps({'sha':sha,'commit':{'tree':{'sha':tree}}}).encode()
-        if '/git/trees/' in url:return json.dumps({'tree':[{'path':'skills/example/SKILL.md','mode':'100644','type':'blob','size':len(skill)},{'path':'skills/example/references/guide.md','mode':'100644','type':'blob','size':5}]}).encode()
+        if '/git/trees/' in url:return json.dumps({'tree':[{'path':'skills/example/SKILL.md','mode':'100644','type':'blob','size':len(skill)},{'path':'skills/example/references/guide.md','mode':'100755','type':'blob','size':5}]}).encode()
         assert '/'+sha+'/' in url
         if url.endswith('/SKILL.md'):return skill
         if url.endswith('/guide.md'):return b'Guide'
@@ -91,6 +91,8 @@ def test_online_preview_installs_reviewed_pinned_resources(client,monkeypatch):
     assert install.status_code==200
     item=next(i for i in install.json()['items'] if i['id']==install.json()['id'])
     assert item['source']==row['url'] and item['installed']
+    with client.app.state.store.db() as db:
+        assert db.execute('SELECT mode FROM extension_files WHERE package=? AND path=?',(item['id'],'references/guide.md')).fetchone()[0]==0o700
     # Reusing the reviewed package reactivates the existing installation, without duplicates.
     again=client.post('/api/extensions/online/install',json={'ticket':preview['ticket'],'digest':preview['digest']}).json()
     assert again['id']==item['id']
