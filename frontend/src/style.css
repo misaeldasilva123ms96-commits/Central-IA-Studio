@@ -75,4 +75,4 @@ header{height:72px;min-height:72px;padding:0 24px}.heading{gap:18px}.model-switc
 .message-timeline{display:flex;flex-direction:column;gap:14px;min-width:0}
 .timeline-text{min-width:0}.timeline-text>:last-child{margin-bottom:0}
 .timeline-tool .tool-activities{margin:0}
-.message .timeline-text>p{font-size:inherit;line-height:1.65}
+.message .timeline-text>p{font-size:inherit;line-height:1.65;color:var(--text)}
