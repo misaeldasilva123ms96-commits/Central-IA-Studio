@@ -25,10 +25,11 @@ async def run_turn(engine,store,broker,cid,messages,profile,payload,tools,native
     remaining=profile.max_output;used=0;prompt_used=0;usage_known=True;calls_used=0
     for step in range(8):
         if engine.abort_event.is_set():return
-        text='';calls={};finish=None;step_usage={}
+        text='';calls={};finish=None;step_usage={};step_timings={};streamed=0;plain=False
         async for chunk in engine.stream(payload):
             if chunk.get('error'):raise ValueError(str(chunk['error']))
             if chunk.get('usage'):step_usage=chunk['usage']
+            if chunk.get('timings'):step_timings=chunk['timings']
             for choice in chunk.get('choices',[]):
                 delta=choice.get('delta',{});text+=delta.get('content') or ''
                 for call in delta.get('tool_calls',[]):
@@ -41,13 +42,18 @@ async def run_turn(engine,store,broker,cid,messages,profile,payload,tools,native
                     current['function']['arguments']+=function.get('arguments') or ''
                     if len(current['function']['arguments'])>180000:raise ValueError('Argumentos de ferramenta excederam o limite.')
                 finish=choice.get('finish_reason') or finish
-            # Text protocol is buffered to avoid displaying JSON control messages as answers.
+            # Buffer possible JSON control calls; stream ordinary answers immediately.
             if native:
                 clean={**chunk,'choices':[{'delta':{k:v for k,v in c.get('delta',{}).items() if k!='tool_calls'},'finish_reason':None} for c in chunk.get('choices',[])]}
                 clean.pop('usage',None)
                 yield 'chunk',clean
-            elif any(c.get('delta',{}).get('reasoning_content') for c in chunk.get('choices',[])):
-                yield 'chunk',{'choices':[{'delta':{'reasoning_content':c['delta']['reasoning_content']}} for c in chunk['choices'] if c.get('delta',{}).get('reasoning_content')]}
+            else:
+                if text.lstrip() and not text.lstrip().startswith('{'):plain=True
+                if plain and len(text)>streamed:
+                    yield 'chunk',{'choices':[{'delta':{'content':text[streamed:]}}]}
+                    streamed=len(text)
+                if any(c.get('delta',{}).get('reasoning_content') for c in chunk.get('choices',[])):
+                    yield 'chunk',{'choices':[{'delta':{'reasoning_content':c['delta']['reasoning_content']}} for c in chunk['choices'] if c.get('delta',{}).get('reasoning_content')]}
         count=step_usage.get('completion_tokens')
         if isinstance(count,int) and count>=0:
             used+=count;remaining-=count
@@ -60,10 +66,10 @@ async def run_turn(engine,store,broker,cid,messages,profile,payload,tools,native
                 if isinstance(raw,dict) and isinstance(raw.get('tool'),str) and isinstance(raw.get('arguments'),dict):
                     calls={0:{'id':uuid.uuid4().hex,'type':'function','function':{'name':raw['tool'],'arguments':json.dumps(raw['arguments'])}}}
             except (ValueError,TypeError):pass
-            if not calls:yield 'chunk',{'choices':[{'delta':{'content':text},'finish_reason':None}]}
+            if not calls and len(text)>streamed:yield 'chunk',{'choices':[{'delta':{'content':text[streamed:]},'finish_reason':None}]}
         if not calls or finish=='length':
             final_usage={'prompt_tokens':prompt_used,'completion_tokens':used,'total_tokens':prompt_used+used} if usage_known else {}
-            yield 'chunk',{'choices':[{'delta':{},'finish_reason':finish if finish in ['stop','length'] else 'stop'}],'usage':final_usage}
+            yield 'chunk',{'choices':[{'delta':{},'finish_reason':finish if finish in ['stop','length'] else 'stop'}],'usage':final_usage,'timings':step_timings}
             return
         if remaining<1:
             yield 'chunk',{'choices':[{'delta':{'content':'\n\nO limite de saída foi atingido antes de executar a ferramenta. Aumente o limite e tente novamente.'},'finish_reason':'length'}],'usage':{'completion_tokens':used} if usage_known else {}}

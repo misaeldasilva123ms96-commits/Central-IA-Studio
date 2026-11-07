@@ -336,6 +336,9 @@ def test_source_packaging_excludes_uppercase_models_and_binaries(tmp_path,monkey
 
 def test_default_portuguese_prompt_is_visible_editable_and_preserved(client,fake_engine):
     from backend.generation_stats import DEFAULT_SYSTEM_PROMPT
+    # Isolate editable user instructions from the optional tool/skill system instructions.
+    from backend.extensions import catalog,change
+    for item in catalog(client.app.state.store):change(client.app.state.store,item['id'],'disable')
     assert client.get('/api/bootstrap').json()['default_system_prompt']==DEFAULT_SYSTEM_PROMPT
     cid=client.post('/api/conversations',json={}).json()['id']
     assert client.get('/api/system-prompt/'+cid).json()['content']==DEFAULT_SYSTEM_PROMPT

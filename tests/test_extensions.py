@@ -14,7 +14,7 @@ from backend.utility_tools import execute
 def test_catalog_install_toggle_remove_persist_and_backup(client):
     items=client.get('/api/extensions').json()['items']
     assert len(items)==16 and sum(i['kind']=='plugin' for i in items)==8
-    assert sum(i['installed'] for i in items)==4
+    assert sum(i['installed'] and i['enabled'] for i in items)==16
     for action,installed,enabled in [('install',True,True),('disable',True,False),('enable',True,True),('remove',False,False)]:
         response=client.patch('/api/extensions/calculator',json={'action':action})
         assert response.status_code==200
@@ -36,7 +36,8 @@ def test_catalog_install_toggle_remove_persist_and_backup(client):
 def test_plugin_gates_preserve_modes_and_internet(tmp_path):
     store=Store(tmp_path/'data')
     def names(mode='plan',internet=False):return {t['function']['name'] for t in tools_for(store,definitions('agent',mode,str(tmp_path),internet,True))}
-    assert 'calculate' not in names() and 'web_search' not in names()
+    assert 'calculate' in names() and 'web_search' not in names()
+    change(store,'calculator','remove');assert 'calculate' not in names()
     change(store,'calculator','install');assert 'calculate' in names()
     change(store,'web','disable');assert 'web_search' not in names(internet=True)
     change(store,'web','enable');assert 'web_search' in names(internet=True)
@@ -62,7 +63,7 @@ def test_skills_enter_real_request_and_session(client,fake_engine):
 @pytest.mark.parametrize('installed',[False,True])
 def test_tool_loop_cannot_execute_uninstalled_plugin(tmp_path,installed):
     store=Store(tmp_path/'data');cid=store.conversation('Cálculo')
-    if installed:change(store,'calculator','install')
+    if not installed:change(store,'calculator','remove')
     tools=tools_for(store,definitions('chat','build','',True))
     class Engine:
         def __init__(self):self.abort_event=asyncio.Event();self.count=0
@@ -126,6 +127,8 @@ def test_concurrent_changes_keep_both_updates(tmp_path,monkeypatch):
 
 def test_global_and_per_skill_automatic_settings_persist(client):
     from backend.extensions import automatic_skills
+    for item in catalog(client.app.state.store):
+        if item['kind']=='skill' and item['id']!='writing':change(client.app.state.store,item['id'],'auto_disable')
     client.patch('/api/extensions/writing',json={'action':'install'})
     assert client.get('/api/extensions/automation').json()['enabled']
     assert client.put('/api/extensions/automation',json={'enabled':False}).status_code==200

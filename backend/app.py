@@ -32,8 +32,19 @@ from .turns import configure_messages,run_turn
 from .mcp_bridge import MCPBridge
 from .import_packages import read_package,public_preview,install_package,MAX_UPLOAD
 from .revisions import undo_revision
+from .online_catalog import OnlineCatalog,SOURCES
 
 ROOT = Path(__file__).resolve().parent.parent
+
+class OnlineBrowseInput(BaseModel):
+    url: str = Field(max_length=1000)
+
+class OnlinePreviewInput(OnlineBrowseInput):
+    key: str = Field(max_length=64)
+
+class OnlineInstallInput(BaseModel):
+    ticket: str = Field(max_length=64)
+    digest: str = Field(max_length=64)
 
 class ConversationInput(BaseModel):
     title: str = Field('Nova conversa',min_length=1,max_length=200)
@@ -327,6 +338,40 @@ def create_app(data_dir=None):
             return Response(body,media_type='text/markdown',headers={'Content-Disposition':'attachment; filename="conversa.md"'})
         return Response(json.dumps(messages,ensure_ascii=False,indent=2),media_type='application/json',headers={'Content-Disposition':'attachment; filename="conversa.json"'})
 
+    online = OnlineCatalog()
+
+    @app.get('/api/extensions/sources')
+    def extension_sources():return {'defaults':SOURCES,'custom':store.get('extension_sources',[])}
+
+    @app.post('/api/extensions/online/browse')
+    async def online_browse(value: OnlineBrowseInput):
+        try:
+            async with asyncio.timeout(90):result=await online.browse(value.url)
+        except (TimeoutError,httpx.HTTPError) as error:raise ValueError('Não foi possível consultar o catálogo online. Verifique a conexão e tente novamente.') from error
+        custom=store.get('extension_sources',[])
+        if value.url not in [s['url'] for s in SOURCES] and value.url not in custom:
+            store.put('extension_sources',(custom+[value.url])[-12:])
+        return result
+
+    @app.post('/api/extensions/online/preview')
+    async def online_preview(value: OnlinePreviewInput):
+        try:
+            async with asyncio.timeout(120):ticket,package,entry=await online.preview(value.url,value.key)
+        except (TimeoutError,httpx.HTTPError) as error:raise ValueError('Não foi possível baixar o pacote. Verifique a conexão e tente novamente.') from error
+        return public_preview(package)|{'ticket':ticket,'entry':entry}
+
+    @app.post('/api/extensions/online/install')
+    async def online_install(value: OnlineInstallInput):
+        preview=online.reviewed(value.ticket,value.digest)
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de instalar.')
+        async with engine.generation_lock:
+            source=preview['entry']['url']
+            existing=next((i for i in catalog(store) if i.get('source')==source and not i.get('parent')),None)
+            if existing:
+                key=existing['id'];await asyncio.to_thread(change_extension,store,key,'install')
+            else:key=await asyncio.to_thread(install_package,store,preview['package'])
+        return {'id':key,'items':catalog(store),'servers':mcp.servers()}
+
     @app.get('/api/extensions')
     def extensions_catalog():
         return {'items':catalog(store)}
@@ -482,6 +527,7 @@ def create_app(data_dir=None):
 
         async def events():
             start_time, first = time.perf_counter(), None
+            created = time.time()
             content, reasoning, finish, usage = '', '', None, {}
             timings = {}
             activities = {}
@@ -544,7 +590,7 @@ def create_app(data_dir=None):
                     'truncated':finish=='length','error':error,'backend_timings':timings,
                     'engine_kind':engine.kind,'profile':value.profile.model_dump(),'activities':list(activities.values()),'timeline':timeline,'session':options}
                 try:
-                    store.add_message(value.conversation,'assistant',content,reasoning,stats)
+                    store.add_message(value.conversation,'assistant',content,reasoning,stats,created=created)
                     if value.benchmark:
                         library = discover(Settings(**store.get('settings',{})).folders)['models']
                         active = next((m for m in library if m['path']==engine.active_path),{})

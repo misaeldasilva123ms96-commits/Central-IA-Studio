@@ -7,10 +7,10 @@ PLUGINS=[
  ('documents','Leitura de documentos','Consulta trechos e busca em documentos anexados à conversa.','Documentos',['read_attachment','search_attachment'],True),
  ('workspace','Arquivos do projeto','Lista, lê e edita arquivos conforme o modo e suas permissões.','Desenvolvimento',['list_files','read_file','write_file'],True),
  ('terminal','Terminal do projeto','Executa programas no Build, seguindo o nível de aprovação escolhido.','Desenvolvimento',['run_command'],True),
- ('calculator','Calculadora','Calcula expressões aritméticas localmente, sem executar código.','Produtividade',['calculate'],False),
- ('json','Assistente JSON','Valida e formata JSON, com diagnóstico de erro.','Desenvolvimento',['format_json'],False),
- ('csv','Análise de CSV','Resume uma coluna numérica, com opção de excluir negativos.','Dados',['summarize_csv'],False),
- ('clock','Data e hora','Consulta a data e a hora atuais em UTC no computador.','Produtividade',['current_datetime'],False),
+ ('calculator','Calculadora','Calcula expressões aritméticas localmente, sem executar código.','Produtividade',['calculate'],True),
+ ('json','Assistente JSON','Valida e formata JSON, com diagnóstico de erro.','Desenvolvimento',['format_json'],True),
+ ('csv','Análise de CSV','Resume uma coluna numérica, com opção de excluir negativos.','Dados',['summarize_csv'],True),
+ ('clock','Data e hora','Consulta a data e a hora atuais em UTC no computador.','Produtividade',['current_datetime'],True),
 ]
 SKILLS=[
  ('code-review','Revisão de código','Revisar problemas concretos e sugerir correções.','Desenvolvimento','Revise o código procurando defeitos concretos. Cite trechos e explique o impacto. Sugira uma correção mínima e como verificar. Não invente execução de testes.'),
@@ -31,7 +31,7 @@ def catalog(store,state=None):
         saved=state.get(key,{'installed':default,'enabled':default})
         result.append(dict(id=key,name=name,description=description,category=category,kind='plugin',tools=tools,version='1.0.0',author='Central IA',bundled=True,**saved))
     for key,name,description,category,prompt in SKILLS:
-        saved=dict(state.get(key,{'installed':False,'enabled':False}));saved.setdefault('automatic',True)
+        saved=dict(state.get(key,{'installed':True,'enabled':True}));saved.setdefault('automatic',True)
         result.append(dict(id=key,name=name,description=description,category=category,kind='skill',instructions=prompt,tools=[],version='1.0.0',author='Central IA',bundled=True,**saved))
     with store.db() as db:
         imported=[dict(row) for row in db.execute('SELECT * FROM imported_extensions ORDER BY name')]
@@ -42,7 +42,7 @@ def catalog(store,state=None):
         root=row['root'].rstrip('/')
         parent_inactive=bool(row['parent'] and (not parent['installed'] or not parent['enabled']))
         resources=[file['path'][len(root)+1:] if root!='.' else file['path'] for file in files if file['package']==(row['parent'] or row['id']) and (root=='.' or file['path'].startswith(root+'/'))]
-        result.append(dict(id=row['id'],name=row['name'],description=row['description'],kind=row['kind'],version=row['version'],instructions=row['instructions'],tools=[],category='Importados',author='Pacote importado',bundled=False,parent=row['parent'],automatic=saved.get('automatic',True),implicit=bool(row['implicit']),parent_inactive=parent_inactive,root=row['root'],resources=resources,installed=saved['installed'] and parent['installed'],enabled=saved['enabled'] and parent['enabled'] and parent['installed']))
+        result.append(dict(id=row['id'],name=row['name'],description=row['description'],kind=row['kind'],version=row['version'],instructions=row['instructions'],tools=[],category='Importados',author='Pacote importado',bundled=False,parent=row['parent'],automatic=saved.get('automatic',True),implicit=bool(row['implicit']),parent_inactive=parent_inactive,root=row['root'],source=row['source'],resources=resources,installed=saved['installed'] and parent['installed'],enabled=saved['enabled'] and parent['enabled'] and parent['installed']))
     return result
 
 

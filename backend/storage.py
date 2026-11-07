@@ -36,6 +36,8 @@ class Store:
             if 'restored' not in revision_columns:db.execute('ALTER TABLE agent_revisions ADD COLUMN restored INTEGER NOT NULL DEFAULT 0')
             attachment_columns={row[1] for row in db.execute('PRAGMA table_info(attachments)')}
             if 'vision' not in attachment_columns:db.execute('ALTER TABLE attachments ADD COLUMN vision BLOB')
+            message_columns={row[1] for row in db.execute('PRAGMA table_info(messages)')}
+            if 'created' not in message_columns:db.execute('ALTER TABLE messages ADD COLUMN created REAL')
             columns={row[1] for row in db.execute('PRAGMA table_info(conversations)')}
             if 'kind' not in columns:
                 db.execute("ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'")
@@ -89,10 +91,10 @@ class Store:
                 row['attachments']=[dict(a) for a in db.execute('SELECT a.id,a.name,a.mime,a.kind,a.size,a.warning,a.sha256 FROM attachments a JOIN message_attachments m ON m.attachment_id=a.id WHERE m.message_id=?',(row['id'],))]
             return rows
 
-    def add_message(self, cid, role, content, reasoning='', stats=None, attachments=None):
+    def add_message(self, cid, role, content, reasoning='', stats=None, attachments=None, created=None):
         with self.db() as db:
-            cur = db.execute('INSERT INTO messages(conversation,role,content,reasoning,stats) VALUES (?,?,?,?,?)',
-                             (cid,role,content,reasoning,json.dumps(stats or {},ensure_ascii=False)))
+            cur = db.execute('INSERT INTO messages(conversation,role,content,reasoning,stats,created) VALUES (?,?,?,?,?,?)',
+                             (cid,role,content,reasoning,json.dumps(stats or {},ensure_ascii=False),time.time() if created is None else created))
             mid=cur.lastrowid
             for aid in attachments or []:
                 db.execute('INSERT INTO message_attachments VALUES (?,?)',(mid,aid))

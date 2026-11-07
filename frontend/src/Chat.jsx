@@ -42,8 +42,8 @@ export default function Chat({engine,profile,notify,onConfigure,onModels,onNavig
    if(sending.current||otherBusy||historyLoading||historyError||items.some(i=>i.uploading||i.error)||(action==='send'&&!text.trim()&&!items.length))return;
    sending.current=true;follow.current=true;setAway(false);
    const sentItems=action==='send'?items:[];
-   if(action==='send'){setMessages(v=>[...v,{id:'pending-user-'+Date.now(),role:'user',content:text,attachments:sentItems,stats:{}}]);setText('');setItems([]);}
-   setBusy(true);onBusy?.(kind);setLive({content:'',reasoning:'',activities:[],timeline:[]});setLimits(null);
+   if(action==='send'){setMessages(v=>[...v,{id:'pending-user-'+Date.now(),role:'user',content:text,attachments:sentItems,stats:{},created:Date.now()/1000}]);setText('');setItems([]);}
+   setBusy(true);onBusy?.(kind);setLive({content:'',reasoning:'',activities:[],timeline:[],created:Date.now()/1000});setLimits(null);
    let currentId=cid;
    try{currentId=cid||await create();delete drafts.current[currentId];await generate({conversation:currentId,content:text,system,profile,action,benchmark,attachments:sentItems.map(a=>a.id),kind,agent_mode:agentMode,access,internet,workspace,skills,auto_skills:autoSkills},(event,data)=>{
      if(event==='limits')setLimits(data);

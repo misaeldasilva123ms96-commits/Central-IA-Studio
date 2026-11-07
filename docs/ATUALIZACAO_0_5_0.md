@@ -9,16 +9,15 @@ Conversas, Agente e Plugins e Habilidades permanecem na navegação principal.
 ## Marketplace local
 
 O catálogo inicial contém 8 plugins e 8 habilidades mantidos pelo Central IA.
-Os 16 itens iniciais são incluídos no aplicativo; instalar os registra e ativa
-localmente. Também é possível importar pacotes e cadastrar conexões MCP. A loja
+Os 16 itens iniciais vêm instalados e ativos, com opção de desativar ou remover
+localmente. Escolhas anteriores de desativação e remoção são preservadas. Também é possível importar pacotes e cadastrar conexões MCP. A loja
 não sincroniza automaticamente o diretório ou as contas do ChatGPT.
 Há pesquisa, categorias, filtro de instalados, detalhes, instalação, ativação,
 desativação e remoção reversível. O estado fica no SQLite e entra no backup. Alterações usam uma transação
 serializada para preservar atualizações simultâneas de extensões diferentes.
 
-Os quatro plugins correspondentes aos recursos existentes vêm instalados e ativos
-para preservar o comportamento anterior: internet, documentos, arquivos do projeto
-e terminal. Calculadora, JSON, CSV e relógio são opcionais, disponíveis para instalar.
+Os oito plugins vêm instalados: internet, documentos, arquivos do projeto,
+terminal, calculadora, JSON, CSV e relógio. O mesmo vale para as oito habilidades.
 
 | Plugin | Função e limites |
 | --- | --- |
@@ -159,7 +158,7 @@ Referências de formato consultadas:
 - https://developers.openai.com/plugins/build/plugins
 - https://developers.openai.com/codex/mcp/
 
-Resultado local final: 100 testes integrados passaram,
+Resultado local final: 112 testes integrados passaram,
 além dos roteiros de navegador. STDIO e HTTP autenticado foram exercitados contra
 servidores locais reais; o exemplo distribuído foi importado e retornou soma 42.
 
@@ -168,3 +167,44 @@ seu próprio controle de Uso automático. Ambos ficam ligados por padrão para i
 instalados/ativos. A recomendação allow_implicit_invocation:false do pacote é
 mostrada, mas não impede o usuário de autorizar o automático. Desligar o automático
 não desinstala a habilidade nem impede a seleção manual.
+
+
+### Catálogos online, básicos e horários
+
+Os oito plugins e as oito habilidades básicas começam instalados e ativos. As
+escolhas já salvas de remover ou desativar continuam valendo. O catálogo local
+agora usa cartões compactos e o filtro Todos / Instalados / Não instalados.
+
+A aba Catálogos online consulta explicitamente quatro fontes públicas: OpenAI
+Skills (curated), Anthropic Skills, Claude Plugins Official e Vercel Agent Skills.
+Também aceita um repositório público GitHub próprio, com pasta opcional no
+formato `/tree/branch/pasta`. Branches com barras, repositórios privados, pacotes
+npm exclusivos do OpenCode, hooks e interfaces proprietárias não são suportados.
+O catálogo identifica SKILL.md e plugins Codex/Claude com habilidades ou MCP;
+plugins apenas com comandos, hooks ou LSP são omitidos. Uma consulta real nesta
+atualização encontrou 39 + 18 + 17 + 9 opções; essa quantidade varia nas fontes.
+
+A consulta fixa um commit, mostra origem e instruções, baixa os arquivos de apoio
+da pasta selecionada e exige confirmação da prévia. A instalação usa exatamente
+o pacote revisado (hash e prévia com validade de dez minutos). Servidores MCP
+continuam desconectados até confirmação própria. Limites: 100 itens por fonte,
+oito fontes em cache por vinte minutos, 200 arquivos, 20 MiB expandidos e 8 MiB
+comprimidos por pacote. O GitHub público pode impor limites de consulta. Catálogo
+local e itens instalados continuam disponíveis sem internet. Licenças e requisitos
+devem ser consultados na origem de cada pacote.
+
+Perguntas e respostas novas mostram HH:mm abaixo da mensagem, no fuso horário
+do navegador. A data completa aparece ao passar o mouse. O horário da pergunta
+é salvo ao aceitar o envio e o da resposta no início da geração. Editar preserva
+o horário original; uma nova geração recebe um novo registro. A migração é
+aditiva e não inventa horários para mensagens antigas que não tinham esse dado.
+Horários e botões ficam fora da cópia do conteúdo da mensagem.
+
+
+Prévias desta revisão: [conversa com horários](previews/v0.5.0/conversa-com-horarios.png),
+[tela pequena](previews/v0.5.0/horarios-mobile.png) e
+[catálogo online em fixture de navegador](previews/v0.5.0/catalogo-online-fixture.png).
+O teste da interface online usa uma fonte determinística; a consulta às quatro
+fontes públicas e o download real foram verificados separadamente. A regressão
+de chat também verifica que horários não entram na cópia do conteúdo e que o
+protocolo textual mantém streaming e métricas de decodificação.

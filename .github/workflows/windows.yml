@@ -136,6 +136,11 @@ jobs:
             if ($folderListing.path -ne [IO.Path]::GetFullPath($releaseModelDir)) { throw 'Seletor de pastas do EXE empacotado falhou' }
             $releaseSettings = @{engine_url='http://127.0.0.1:5001'; executable=$r.settings.executable; folders=@($releaseModelDir)}
             Invoke-RestMethod 'http://127.0.0.1:8765/api/settings' -Method Put -Headers $releaseHeaders -ContentType 'application/json' -Body ($releaseSettings | ConvertTo-Json) | Out-Null
+            # Keep the tiny byte-token fixture's context focused on native inference.
+            $releaseExtensions = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions'
+            foreach ($extension in $releaseExtensions.items) {
+              if ($extension.enabled) { Invoke-RestMethod "http://127.0.0.1:8765/api/extensions/$($extension.id)" -Method Patch -Headers $releaseHeaders -ContentType 'application/json' -Body '{"action":"disable"}' | Out-Null }
+            }
             $releaseProfile = $r.profile
             $releaseProfile.cache_kv = 'f16'; $releaseProfile.flash_attention = $false; $releaseProfile.max_output = 8
             $releaseStarted = Invoke-RestMethod 'http://127.0.0.1:8765/api/engine/start' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body (@{path=$releaseModelPath; profile=$releaseProfile} | ConvertTo-Json)

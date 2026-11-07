@@ -69,7 +69,7 @@ def read_package(data,name):
     # GitHub ZIPs commonly include a single enclosing directory.
     while all('/' in p for p in files) and len({p.split('/')[0] for p in files})==1:
         files={p.split('/',1)[1]:v for p,v in files.items()};modes={p.split('/',1)[1]:v for p,v in modes.items()}
-    manifest_path=next((p for p in ['plugin.json','.codex-plugin/plugin.json'] if p in files),None)
+    manifest_path=next((p for p in ['plugin.json','.codex-plugin/plugin.json','.claude-plugin/plugin.json'] if p in files),None)
     warnings=[];skills=[];servers={};manifest={}
     if manifest_path:
         try:manifest=json.loads(files[manifest_path])
@@ -106,7 +106,7 @@ def read_package(data,name):
         kind='plugin'
     elif 'SKILL.md' in files:
         skill=skill_document(files['SKILL.md']);plugin_name=skill['name'];description=skill['description'];skills=[skill|{'root':'.'}];kind='skill'
-    else:raise ValueError('Não foi encontrado plugin.json, .codex-plugin/plugin.json ou SKILL.md na raiz.')
+    else:raise ValueError('Não foi encontrado plugin.json, .codex-plugin/plugin.json, .claude-plugin/plugin.json ou SKILL.md na raiz.')
     if len(skills)>20 or len(servers)>8:raise ValueError('Pacote limitado a 20 habilidades e 8 servidores MCP.')
     if not skills and not servers:raise ValueError('Pacote sem habilidades ou servidores MCP compatíveis.')
     for skill in skills:
@@ -149,13 +149,13 @@ def install_package(store,package):
     with store.db() as db:
         db.execute('BEGIN IMMEDIATE')
         instructions=package['skills'][0]['instructions'] if package['kind']=='skill' else ''
-        db.execute('INSERT INTO imported_extensions(id,parent,kind,name,description,version,instructions,root,source) VALUES (?,?,?,?,?,?,?,?,?)',(parent,None,package['kind'],package['name'],package['description'],package['version'],instructions,'.','upload'))
+        db.execute('INSERT INTO imported_extensions(id,parent,kind,name,description,version,instructions,root,source) VALUES (?,?,?,?,?,?,?,?,?)',(parent,None,package['kind'],package['name'],package['description'],package['version'],instructions,'.',package.get('source','upload')))
         if package['kind']=='skill':db.execute('UPDATE imported_extensions SET implicit=? WHERE id=?',(int(package['skills'][0]['implicit']),parent))
         for path,data in package['files'].items():db.execute('INSERT INTO extension_files VALUES (?,?,?,?)',(parent,path,data,package['modes'][path]))
         if package['kind']=='plugin':
             for skill in package['skills']:
                 key='import-'+uuid.uuid4().hex
-                db.execute('INSERT INTO imported_extensions(id,parent,kind,name,description,version,instructions,root,source) VALUES (?,?,?,?,?,?,?,?,?)',(key,parent,'skill',skill['name'],skill['description'],package['version'],skill['instructions'],skill['root'],'upload'))
+                db.execute('INSERT INTO imported_extensions(id,parent,kind,name,description,version,instructions,root,source) VALUES (?,?,?,?,?,?,?,?,?)',(key,parent,'skill',skill['name'],skill['description'],package['version'],skill['instructions'],skill['root'],package.get('source','upload')))
                 db.execute('UPDATE imported_extensions SET implicit=? WHERE id=?',(int(skill['implicit']),key))
         for server in package['servers']:
             key=uuid.uuid4().hex

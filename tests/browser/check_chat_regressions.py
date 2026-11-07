@@ -77,7 +77,7 @@ async def check(port,directory):
         await expect(page.locator('.chat-host:not([hidden]) .messages pre > code.language-python')).to_have_count(1)
         # Same Markdown (GFM tables) during streaming and after persistence.
         await expect(page.locator('.chat-host:not([hidden]) .messages table')).to_have_count(1)
-        assert handler.payloads[-1][1]['messages'][0]['content']==custom
+        assert handler.payloads[-1][1]['messages'][0]['content'].startswith(custom+'\n')
         await page.get_by_role('button',name='Abrir ajustes do Central IA',exact=True).click()
         await page.get_by_role('menuitem',name='Parâmetros',exact=True).click()
         await page.get_by_role('button',name='Conversas',exact=True).click()
@@ -116,6 +116,7 @@ async def check(port,directory):
         await page.keyboard.press('Control+c')
         copied=await page.evaluate('''async()=>{const items=await navigator.clipboard.read();const out={};for(const item of items)for(const type of item.types)out[type]=await(await item.getType(type)).text();return out;}''')
         assert '<svg' not in copied['text/html'] and '<button' not in copied['text/html']
+        assert '<time' not in copied['text/html']
         assert '```python\n'+code.rstrip() in copied['text/plain']
         assert unlabelled.rstrip() in copied['text/plain']
         assert 'A\tB\n1\t2\n' in copied['text/plain']

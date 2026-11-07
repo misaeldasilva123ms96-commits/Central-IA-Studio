@@ -24,14 +24,14 @@ SKILL=b'---\nname: external-review\ndescription: Review a project with supportin
 def package(legacy=False):
     out=io.BytesIO()
     with ZipFile(out,'w') as z:
-        z.writestr('demo/.codex-plugin/plugin.json' if legacy else 'demo/plugin.json',json.dumps({'name':'demo-plugin','description':'Imported test package','version':'1.2.0','skills':'./skills/'}))
+        z.writestr('demo/.claude-plugin/plugin.json' if legacy=='claude' else 'demo/.codex-plugin/plugin.json' if legacy else 'demo/plugin.json',json.dumps({'name':'demo-plugin','description':'Imported test package','version':'1.2.0','skills':'./skills/'}))
         z.writestr('demo/skills/review/SKILL.md',SKILL)
         z.writestr('demo/skills/review/references/checklist.md','Check inputs and errors.')
         z.writestr('demo/.mcp.json' if legacy else 'demo/mcp.json',json.dumps({'mcpServers':{'fixture':{'type':'stdio','command':sys.executable,'args':[str(FIXTURE)]}}}))
     return out.getvalue()
 
 
-@pytest.mark.parametrize('legacy',[False,True])
+@pytest.mark.parametrize('legacy',[False,True,'claude'])
 def test_portable_and_codex_packages_preserve_skills_resources_and_servers(tmp_path,legacy):
     store=Store(tmp_path/'data');doc=read_package(package(legacy),'plugin.zip')
     key=install_package(store,doc)
@@ -187,7 +187,7 @@ def test_implicit_policy_and_skill_dependencies_are_imported(tmp_path):
     from backend.extensions import automatic_skills
     assert not next(i for i in catalog(store) if i['id']==key)['implicit']
     assert any(i['id']==key for i in automatic_skills(store,[],True))
-    change(store,key,'auto_disable');assert not automatic_skills(store,[],True)
+    change(store,key,'auto_disable');assert key not in [i['id'] for i in automatic_skills(store,[],True)]
     change(store,key,'auto_enable');assert automatic_skills(store,[],True)
     store.put('skill_automation',{'enabled':False});assert not automatic_skills(store,[],True)
     assert apply_skills(store,[{'role':'user','content':'x'}],[key])
