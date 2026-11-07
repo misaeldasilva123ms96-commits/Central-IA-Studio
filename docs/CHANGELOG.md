@@ -6,7 +6,10 @@ Modelos, Parâmetros, Benchmarks e Monitoramento no menu do rodapé; tema sem
 duplicação no topo. Marketplace local de 8 plugins e 8 habilidades, com instalação,
 ativação/remoção persistidas e seleção de habilidades no compositor. Ferramentas
 opcionais de aritmética, JSON, CSV e data/hora; chamadas filtradas no backend sem
-alterar as permissões. As instruções escolhidas entram na preparação real do pedido.
+alterar as permissões. As instruções escolhidas entram na preparação real do pedido. Importação de
+SKILL.md e plugins portáteis/legados, carga automática progressiva, referências e
+scripts com aprovação. Cliente MCP STDIO/Streamable HTTP com consentimento, seleção
+de ferramentas e credenciais de sessão.
 
 ## 0.4.0 — Anexos, Agente e internet
 

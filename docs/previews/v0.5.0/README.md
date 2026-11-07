@@ -9,3 +9,11 @@ a fixture não representa qualidade de um modelo treinado.
 - [Marketplace em tela menor](marketplace-tela-menor.png)
 - [Seleção de habilidade na conversa](habilidade-na-conversa.png)
 - [Quatro módulos e tema no rodapé](rodape-expansivo.png)
+
+- [MCP conectado com seleção de ferramentas](mcp-conectado.png)
+- [Chamada MCP real na conversa](mcp-na-conversa.png)
+- [Habilidade SKILL.md importada](habilidade-importada.png)
+- [Carga automática de habilidade](habilidade-automatica.png)
+
+As novas capturas usam um servidor MCP local real de teste, com consentimento
+antes da conexão e da chamada. O modelo HTTP continua sendo uma fixture explícita.

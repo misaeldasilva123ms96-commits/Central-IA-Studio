@@ -116,13 +116,13 @@ def prepare_action(name,args,kind,mode,workspace,internet,access,attachment_ids=
 
 
 def public_action(action):
-    return {key:action[key] for key in ['name','arguments','summary','preview','cwd','path','outside'] if key in action}
+    return {key:action[key] for key in ['name','arguments','summary','preview','cwd','path','outside','display_name'] if key in action}
 
 
-async def run_command(argv,cwd,abort):
+async def run_command(argv,cwd,abort,env=None):
     flags={'creationflags':0x00000200} if os.name=='nt' else {'start_new_session':True}
     process=await asyncio.create_subprocess_exec(*argv,cwd=cwd,stdin=asyncio.subprocess.DEVNULL,
-            stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.STDOUT,**flags)
+            stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.STDOUT,env=env,**flags)
     async def stop():
         if os.name=='nt':
             if process.returncode is None:

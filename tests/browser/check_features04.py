@@ -37,6 +37,10 @@ def post(self):
         result=json.loads(content)
         answer='A ação não foi executada: '+result['error'] if result.get('error') else 'A ferramenta concluiu a ação solicitada.'
     elif isinstance(content,list):answer='Imagem recebida pelo transporte de teste. Esta fixture não faz reconhecimento visual.'
+    elif content.startswith('Consulte MCP'):
+        call=(handler.mcp_alias,{'x':20,'y':22});answer=''
+    elif content.startswith('Use automaticamente'):
+        call=('load_skill',{'id':handler.skill_id});answer=''
     elif content.startswith('Calcule'):
         call=('calculate',{'expression':'(10 + 5) * 2'});answer=''
     elif content.startswith('Liste'):
@@ -100,6 +104,10 @@ async def check(port,project):
         await page.keyboard.press('Escape')
         await page.get_by_role('button',name='Plugins e Habilidades',exact=True).click()
         await expect(page.locator('.extension-card')).to_have_count(8)
+        example=await page.request.get(f'http://127.0.0.1:{port}/central-demo-plugin.zip')
+        assert example.status==200
+        from zipfile import ZipFile
+        with ZipFile(io.BytesIO(await example.body())) as archive:assert 'plugin.json' in archive.namelist()
         await page.screenshot(path=str(out/'marketplace-plugins.png'))
         await page.set_viewport_size({'width':390,'height':844})
         assert await page.evaluate('document.documentElement.scrollWidth<=390')
@@ -139,6 +147,64 @@ async def check(port,project):
         await page.reload()
         await page.get_by_role('button',name='Calcule o resultado da expressão',exact=True).click()
         await expect(host.locator('.skills-trigger')).to_contain_text('1')
+        await page.get_by_role('button',name='Plugins e Habilidades',exact=True).click()
+        await page.get_by_role('button',name='Conexões MCP',exact=True).click()
+        await page.get_by_role('button',name='Adicionar servidor',exact=True).click()
+        dialog=page.get_by_role('dialog',name='Adicionar servidor MCP',exact=True)
+        await dialog.get_by_label('Nome',exact=True).fill('MCP de teste')
+        await dialog.get_by_label('Programa',exact=True).fill(sys.executable)
+        await dialog.get_by_label('Argumentos MCP',exact=True).fill(json.dumps([str(ROOT/'tests/fixtures/mcp_server.py')]))
+        await dialog.get_by_role('button',name='Salvar servidor',exact=True).click()
+        server=page.get_by_role('article',name='MCP de teste',exact=True)
+        await expect(server).to_be_visible()
+        await server.get_by_role('button',name='Conectar',exact=True).click()
+        consent=page.get_by_role('dialog',name='Autorizar conexão MCP',exact=True)
+        await consent.get_by_role('button',name='Cancelar',exact=True).click()
+        await expect(server.get_by_role('button',name='Conectar',exact=True)).to_be_visible()
+        await server.get_by_role('button',name='Conectar',exact=True).click()
+        await consent.get_by_role('button',name='Autorizar e conectar',exact=True).click()
+        await expect(server.get_by_role('button',name='Desconectar',exact=True)).to_be_visible(timeout=30000)
+        await server.get_by_role('checkbox',name='sum_values',exact=True).check()
+        await expect(server.get_by_role('checkbox',name='sum_values',exact=True)).to_be_enabled()
+        response=await page.request.get(f'http://127.0.0.1:{port}/api/mcp')
+        from backend.mcp_bridge import tool_alias
+        handler.mcp_alias=tool_alias((await response.json())['servers'][0]['id'],'sum_values')
+        await page.screenshot(path=str(out/'mcp-conectado.png'))
+        await page.get_by_role('button',name='Conversas',exact=True).click()
+        await page.get_by_role('button',name='Nova conversa',exact=True).click()
+        await host.get_by_role('textbox',name='Mensagem',exact=True).fill('Consulte MCP para somar 20 e 22')
+        await host.get_by_role('button',name='Enviar',exact=True).click()
+        mcp_approval=host.get_by_role('region',name='Aprovação pendente')
+        await expect(mcp_approval).to_contain_text('MCP de teste')
+        await mcp_approval.get_by_role('button',name='Permitir uma vez',exact=True).click()
+        await expect(host.get_by_role('button',name='Interromper',exact=True)).to_have_count(0)
+        await expect(host.locator('.tool-activity.done')).to_have_count(1)
+        generated=[v for key,v in handler.payloads if key=='generate']
+        mcp_result=json.loads(generated[-1]['messages'][-1]['content'])
+        assert (mcp_result.get('structuredContent') or json.loads(mcp_result['content'][0]['text']))['total']==42
+        await page.screenshot(path=str(out/'mcp-na-conversa.png'))
+        await page.get_by_role('button',name='Plugins e Habilidades',exact=True).click()
+        await page.get_by_role('button',name='Conexões MCP',exact=True).click()
+        await server.get_by_role('button',name='Desconectar',exact=True).click()
+        await page.get_by_role('button',name='Habilidades',exact=True).click()
+        imported=b'---\nname: imported-checklist\ndescription: Imported checklist for targeted review.\n---\nUse CHECKLIST_IMPORTADO before answering. Preserve the user intent.\n'
+        await page.get_by_label('Importar pacote de extensão',exact=True).set_input_files({'name':'SKILL.md','mimeType':'text/markdown','buffer':imported})
+        preview=page.get_by_role('dialog',name='Revisar importação',exact=True)
+        await expect(preview).to_contain_text('imported-checklist')
+        await preview.get_by_role('button',name='Confirmar instalação',exact=True).click()
+        await expect(page.get_by_role('article',name='imported-checklist',exact=True)).to_be_visible()
+        response=await page.request.get(f'http://127.0.0.1:{port}/api/extensions')
+        handler.skill_id=next(i['id'] for i in (await response.json())['items'] if i['name']=='imported-checklist')
+        await page.screenshot(path=str(out/'habilidade-importada.png'))
+        await page.get_by_role('button',name='Conversas',exact=True).click()
+        await page.get_by_role('button',name='Nova conversa',exact=True).click()
+        await host.get_by_role('textbox',name='Mensagem',exact=True).fill('Use automaticamente a habilidade de checklist')
+        await host.get_by_role('button',name='Enviar',exact=True).click()
+        await expect(host.locator('.tool-activity.done')).to_have_count(1)
+        await expect(host.get_by_role('button',name='Interromper',exact=True)).to_have_count(0)
+        generated=[v for key,v in handler.payloads if key=='generate']
+        assert 'CHECKLIST_IMPORTADO' in generated[-1]['messages'][-1]['content']
+        await page.screenshot(path=str(out/'habilidade-automatica.png'))
         await page.get_by_role('button',name='Nova conversa',exact=True).click()
         if await page.get_by_role('button',name='Fechar aviso').count():await page.get_by_role('button',name='Fechar aviso').click()
 

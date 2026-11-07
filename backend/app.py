@@ -1,4 +1,5 @@
 import asyncio
+import re
 import csv
 import io
 import json
@@ -26,8 +27,10 @@ from .folders import browse_folders
 from .generation_stats import DEFAULT_SYSTEM_PROMPT,backend_timings,estimate_seconds
 from .attachments import MAX_FILE,extract,public_attachment,model_message
 from .agent_tools import ApprovalBroker,definitions
-from .extensions import catalog,change as change_extension,tools_for,apply_skills
+from .extensions import catalog,change as change_extension,tools_for,apply_skills,resource_definition,automatic_skills,automatic_context,activation_definition
 from .turns import configure_messages,run_turn
+from .mcp_bridge import MCPBridge
+from .import_packages import read_package,public_preview,install_package,MAX_UPLOAD
 from .revisions import undo_revision
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,6 +49,7 @@ class GenerateInput(BaseModel):
     benchmark: bool = False
     attachments: list[str] = Field(default_factory=list,max_length=6)
     skills: list[str] = Field(default_factory=list,max_length=3)
+    auto_skills: bool = True
     kind: Literal['chat','agent'] = 'chat'
     agent_mode: Literal['build','plan'] = 'build'
     access: Literal['ask','auto','full'] = 'ask'
@@ -54,6 +58,19 @@ class GenerateInput(BaseModel):
 
 class ExtensionInput(BaseModel):
     action: Literal['install','enable','disable','remove']
+
+class MCPConfigInput(BaseModel):
+    name: str
+    config: dict
+
+class MCPConnectInput(BaseModel):
+    confirmed: Literal[True]
+    token: str = ''
+    env: dict[str,str] = Field(default_factory=dict)
+    headers: dict[str,str] = Field(default_factory=dict)
+
+class MCPToolsInput(BaseModel):
+    names: list[str] = Field(default_factory=list,max_length=8)
 
 class StartInput(BaseModel):
     path: str
@@ -72,6 +89,7 @@ class EditInput(BaseModel):
 def create_app(data_dir=None):
     store = Store(data_dir or os.environ.get('CENTRAL_DATA_DIR') or ROOT/'data')
     engine = Engine(store)
+    mcp = MCPBridge(store)
     approvals = ApprovalBroker()
     uploads = asyncio.Semaphore(2)
     token = secrets.token_urlsafe(32)
@@ -85,13 +103,14 @@ def create_app(data_dir=None):
     async def lifespan(app):
         logger.info('Gerenciador iniciado')
         yield
+        await mcp.close()
         await asyncio.to_thread(engine.stop)
         logger.info('Gerenciador encerrado')
         handler.close()
         logger.removeHandler(handler)
 
     app = FastAPI(title='Central IA Studio',lifespan=lifespan,docs_url=None,redoc_url=None)
-    app.state.store, app.state.engine, app.state.approvals = store, engine, approvals
+    app.state.store, app.state.engine, app.state.approvals, app.state.mcp = store, engine, approvals, mcp
 
     @app.middleware('http')
     async def local_security(request, call_next):
@@ -313,7 +332,64 @@ def create_app(data_dir=None):
     async def update_extension(key: str,value: ExtensionInput):
         if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de alterar extensões.')
         async with engine.generation_lock:
-            return {'items':await asyncio.to_thread(change_extension,store,key,value.action)}
+            items=await asyncio.to_thread(change_extension,store,key,value.action)
+            active={item['id'] for item in items if item['enabled'] and item['installed']}
+            for server in mcp.servers():
+                if server['package'] and server['package'] not in active:await mcp.disconnect(server['id'])
+            return {'items':items}
+
+    @app.post('/api/extensions/import')
+    async def import_extension(request: Request,name: str,confirm: bool=False):
+        data=bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data)>MAX_UPLOAD:raise ValueError('Pacote limitado a 8 MiB.')
+        package=await asyncio.to_thread(read_package,bytes(data),name)
+        if not confirm:return public_preview(package)
+        if request.headers.get('x-import-digest')!=package['digest']:raise ValueError('Revise o pacote antes de confirmar a instalação.')
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de instalar.')
+        async with engine.generation_lock:
+            key=await asyncio.to_thread(install_package,store,package)
+        return {'id':key,'items':catalog(store),'servers':mcp.servers()}
+
+    @app.get('/api/mcp')
+    def mcp_list():return {'servers':mcp.servers()}
+
+    @app.post('/api/mcp')
+    async def mcp_add(value: MCPConfigInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para alterar conexões.')
+        async with engine.generation_lock:key=mcp.save(value.name,value.config)
+        return {'id':key,'servers':mcp.servers()}
+
+    @app.post('/api/mcp/{key}/connect')
+    async def mcp_connect(key: str,value: MCPConnectInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para conectar.')
+        if len(value.token)>4096 or len(value.env)>32 or len(value.headers)>16:raise ValueError('Credenciais excedem o limite.')
+        for field in [value.env,value.headers]:
+            if any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_-]{0,63}',k) or len(v)>4096 or '\r' in v or '\n' in v for k,v in field.items()):raise ValueError('Credencial inválida.')
+        if any(k.lower() in ['host','content-length','cookie','set-cookie'] for k in value.headers):raise ValueError('Cabeçalho reservado.')
+        async with engine.generation_lock:servers=await mcp.connect(key,{'token':value.token,'env':value.env,'headers':value.headers})
+        return {'servers':servers}
+
+    @app.post('/api/mcp/{key}/disconnect')
+    async def mcp_disconnect(key: str):
+        if engine.generation_lock.locked():raise HTTPException(409,'Interrompa a tarefa antes de desconectar.')
+        async with engine.generation_lock:await mcp.disconnect(key)
+        return {'servers':mcp.servers()}
+
+    @app.put('/api/mcp/{key}/tools')
+    async def mcp_select(key: str,value: MCPToolsInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para alterar ferramentas.')
+        async with engine.generation_lock:mcp.select(key,value.names)
+        return {'servers':mcp.servers()}
+
+    @app.delete('/api/mcp/{key}')
+    async def mcp_delete(key: str):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de remover a conexão.')
+        async with engine.generation_lock:
+            await mcp.disconnect(key)
+            with store.db() as db:db.execute('DELETE FROM mcp_servers WHERE id=?',(key,))
+        return {'servers':mcp.servers()}
 
     @app.post('/api/generate')
     async def generate(value: GenerateInput, request: Request):
@@ -356,12 +432,14 @@ def create_app(data_dir=None):
                 if image_count+sum(a['kind']=='image' for a in selected_attachments)>8:
                     raise ValueError('Esta conversa excederia oito imagens. Use uma nova conversa.')
                 messages.append(model_message(store,{'role':'user','content':value.content,'attachments':selected_attachments}))
-            options={k:getattr(value,k) for k in ['kind','agent_mode','access','internet','workspace','skills']}
+            options={k:getattr(value,k) for k in ['kind','agent_mode','access','internet','workspace','skills','auto_skills']}
             document_ids=list(dict.fromkeys(a['id'] for m in history for a in m.get('attachments',[]) if a['kind']=='document'))
             if value.action=='send':document_ids+= [a['id'] for a in selected_attachments if a['kind']=='document' and a['id'] not in document_ids]
             messages=apply_skills(store,messages,value.skills)
-            tool_defs=tools_for(store,definitions(value.kind,value.agent_mode,value.workspace,value.internet,bool(document_ids)))
-            tool_options=options | {'attachment_ids':document_ids}
+            eligible_skills=automatic_skills(store,value.skills,value.auto_skills)
+            messages=automatic_context(messages,eligible_skills)
+            tool_defs=tools_for(store,definitions(value.kind,value.agent_mode,value.workspace,value.internet,bool(document_ids)))+activation_definition(eligible_skills)+resource_definition(store,value.skills+[s['id'] for s in eligible_skills],value.kind,value.agent_mode,value.workspace)+mcp.definitions(value.kind,value.agent_mode,value.internet)
+            tool_options=options | {'attachment_ids':document_ids,'mcp':mcp,'eligible_skills':[s['id'] for s in eligible_skills],'loaded_skills':list(value.skills)}
             native_tools=(await engine.status()).get('tools') is True if tool_defs else False
             messages=configure_messages(messages,tool_defs,native_tools,value.agent_mode if value.kind=='agent' else 'conversa')
             payload, limits = await engine.prepare(messages,value.profile,tool_defs if native_tools else None)

@@ -9,8 +9,9 @@ Conversas, Agente e Plugins e Habilidades permanecem na navegação principal.
 ## Marketplace local
 
 O catálogo inicial contém 8 plugins e 8 habilidades mantidos pelo Central IA.
-Os pacotes são incluídos no aplicativo; instalar registra e ativa o item localmente,
-sem baixar ou executar código de terceiros. Não é uma loja de extensões remotas.
+Os 16 itens iniciais são incluídos no aplicativo; instalar os registra e ativa
+localmente. Também é possível importar pacotes e cadastrar conexões MCP. A loja
+não sincroniza automaticamente o diretório ou as contas do ChatGPT.
 Há pesquisa, categorias, filtro de instalados, detalhes, instalação, ativação,
 desativação e remoção reversível. O estado fica no SQLite e entra no backup. Alterações usam uma transação
 serializada para preservar atualizações simultâneas de extensões diferentes.
@@ -64,3 +65,100 @@ Não é benchmark de qualidade de um modelo treinado, nem teste de loja externa.
 
 Resultado local: 77 testes integrados e os três roteiros Chromium passaram,
 incluindo regressões de chat/cópia, E2E de limites/benchmark e o catálogo novo.
+
+## Formatos externos e funcionamento no estilo Codex
+
+Além dos 16 itens iniciais, o catálogo importa SKILL.md e pacotes ZIP. A importação
+mostra habilidades, instruções, arquivos, servidores e avisos antes de confirmar;
+a confirmação fica vinculada ao SHA-256 dos bytes revisados. Importar não inicia
+servidores nem executa scripts.
+
+Formatos aceitos:
+
+- Habilidade independente: SKILL.md com frontmatter YAML contendo name e description,
+  corpo de instruções, referências, scripts e assets opcionais no ZIP.
+- Layout portátil Agent Plugins: plugin.json na raiz, skills/ e mcp.json.
+- Layout legado Codex: .codex-plugin/plugin.json, skills/ e .mcp.json.
+- agents/openai.yaml: política allow_implicit_invocation e dependências MCP com URL.
+  Dependências sem configuração utilizável precisam ser cadastradas pelo usuário.
+
+A compatibilidade cobre esses componentes, não todas as extensões do catálogo
+proprietário do ChatGPT/Codex. Hooks, apps exclusivos da conta, telas MCP Apps,
+OAuth interativo e transferência de sessões da OpenAI não são implementados.
+O app avisa sobre componentes reconhecidos que não executa.
+
+ZIP: até 8 MiB no upload, 200 entradas, 20 MiB expandidos e 2 MiB por arquivo.
+Até 20 habilidades e 8 servidores por pacote. Caminhos absolutos, travessia de
+pastas, links simbólicos, nomes ambíguos e nomes reservados do Windows são recusados.
+YAML usa carregador seguro sem aliases/objetos executáveis. Recursos originais ficam
+no SQLite e no backup; cópias de trabalho são materializadas na pasta privada do app.
+
+## Seleção automática e recursos
+
+Com a seleção automática ligada no compositor, o modelo recebe nomes/descrições de
+até 16 habilidades instaladas e pode usar load_skill quando uma for relevante. O
+conteúdo é carregado sob demanda, sem executar código. A política de opt-out em
+agents/openai.yaml é respeitada; habilidades com opt-out ainda podem ser escolhidas
+manualmente. Há limite conjunto de três habilidades por tarefa.
+
+A carga automática retorna até 4.000 caracteres de instruções, informa truncamento
+e permite consultar o SKILL.md completo por trechos com read_skill_resource. Recursos
+só podem ser lidos por IDs selecionados/carregados e dentro da pasta da habilidade.
+O loop e o contexto continuam limitados: habilidades grandes podem exigir contexto
+maior ou consultas adicionais. A seleção correta depende do modelo, não é garantida
+por um teste de transporte.
+
+Scripts usam run_skill_script somente no Agente Build com projeto escolhido e plugin
+Terminal ativo. A confirmação mostra o comando real; Ask e Auto pedem aprovação,
+Full segue a autorização escolhida. Python, JavaScript, PowerShell e shell usam
+runtimes instalados no computador. Plan não executa scripts. Variáveis de raiz
+PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT e SKILL_ROOT são disponibilizadas. Não existe sandbox
+para esses programas, como já ocorre com comandos normais do Build.
+
+## Conexões MCP
+
+O cliente usa o SDK MCP Python 1.30.0 e suporta STDIO e Streamable HTTP. Cada conexão
+é cadastrada sem iniciar programa/requisição; o usuário confirma Conectar a cada
+abertura do app. Uma tarefa dedicada mantém transporte e sessão no mesmo ciclo de
+vida, inclusive encerramento e interrupção. Nenhuma conexão é restaurada em segundo
+plano sem esse consentimento.
+
+Depois de conectar, escolha até oito ferramentas por servidor; no máximo 16 entram
+em uma tarefa. Descoberta suporta até oito páginas/256 ferramentas e catálogo de até
+1 MiB. Esquemas de entrada são limitados e referências externas são recusadas.
+Somente ferramentas conectadas, selecionadas e com plugin de origem ativo são
+oferecidas. Texto e conteúdo estruturado são retornados na sequência da conversa;
+resultados são limitados a 40.000 caracteres no histórico e 6.000 no contexto do
+modelo. Imagens/áudio retornados por MCP não recebem análise multimodal nesta etapa.
+MCP prompts/resources não são expostos como ferramentas nesta etapa.
+
+Conversa e Agente Build podem usar MCP; Plan não oferece ferramentas MCP, pois o
+cliente não pode garantir a ausência de efeitos apenas por uma anotação do servidor.
+MCP HTTP requer o botão Internet ligado na conversa. STDIO inicia processos com
+rede/permissões próprias. Chamadas MCP pedem aprovação em Ask e Auto; Full dispensa.
+A autorização do botão Internet para busca/leitura nativa permanece inalterada.
+Interromper encerra a conexão e o processo local; não desfaz ações já realizadas por
+um serviço externo.
+
+Autenticação: Bearer e env/headers com referências ${VAR}, ${env:VAR} ou $VAR. Os
+valores digitados ao conectar ficam só em memória, não entram no SQLite/backup e não
+são enviados ao modelo como configuração. Configurações e arquivos importados são
+dados do usuário: não inclua credenciais literais em comandos, URLs ou arquivos.
+Credenciais via ambiente são lidas do ambiente do computador. Serviços que exigem
+OAuth interativo precisam de suporte adicional ou de autenticação alternativa
+oficialmente aceita pelo próprio serviço.
+
+O pacote de exemplo pode ser baixado no marketplace. Ele inclui um SKILL.md com
+referência/script e um servidor MCP de soma usando apenas Python padrão. Seu código
+está em examples/extensions/central-demo. Importação e chamada real do exemplo são
+testadas; o Python para executar o servidor é um pré-requisito externo. O motor de
+inferência continua incluído no EXE, sem exigir Python/Node para conversa local.
+
+Referências de formato consultadas:
+- https://developers.openai.com/codex/skills/
+- https://developers.openai.com/plugins/build/plugins
+- https://developers.openai.com/codex/mcp/
+
+Resultado local após a compatibilidade externa: 99 testes integrados passaram,
+além dos roteiros de navegador. STDIO e HTTP autenticado foram exercitados contra
+servidores locais reais; o exemplo distribuído foi importado e retornou soma 42.

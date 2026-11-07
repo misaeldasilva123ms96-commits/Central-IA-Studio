@@ -114,6 +114,20 @@ jobs:
             $releasePdf = Invoke-RestMethod 'http://127.0.0.1:8765/api/attachments?name=documento.pdf' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $pdfFile
             if ($releasePdf.kind -ne 'document') { throw 'Leitor PDF do EXE falhou' }
             Write-Host 'Studio EXE: extracao isolada de texto, PNG e PDF passou.'
+            $exampleZip = Join-Path $PWD 'work/package smoke/plugin-example.zip'
+            Invoke-WebRequest 'http://127.0.0.1:8765/central-demo-plugin.zip' -OutFile $exampleZip
+            $previewPlugin = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions/import?name=demo.zip' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $exampleZip
+            if ($previewPlugin.name -ne 'central-demo') { throw 'Preview do plugin no EXE falhou' }
+            $installHeaders = @{ 'X-Central-Token' = $r.token; 'X-Import-Digest' = $previewPlugin.digest }
+            $installedPlugin = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions/import?name=demo.zip&confirm=true' -Method Post -Headers $installHeaders -ContentType 'application/octet-stream' -InFile $exampleZip
+            $mcpId = $installedPlugin.servers[0].id
+            if ($installedPlugin.servers[0].connected) { throw 'Importacao iniciou servidor sem consentimento' }
+            $mcpConnected = Invoke-RestMethod "http://127.0.0.1:8765/api/mcp/$mcpId/connect" -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{"confirmed":true}'
+            if (!$mcpConnected.servers[0].connected -or $mcpConnected.servers[0].tools[0].name -ne 'demo_sum') { throw 'SDK MCP do EXE congelado nao conectou/descobriu ferramentas' }
+            Invoke-RestMethod "http://127.0.0.1:8765/api/mcp/$mcpId/disconnect" -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{}' | Out-Null
+            Invoke-RestMethod "http://127.0.0.1:8765/api/extensions/$($installedPlugin.id)" -Method Patch -Headers $releaseHeaders -ContentType 'application/json' -Body '{"action":"disable"}' | Out-Null
+            Write-Host 'Studio EXE: importacao portavel, consentimento e MCP STDIO real passaram.'
+
             $releaseModelDir = Join-Path $PWD 'work/package smoke/modelo de teste'
             New-Item -ItemType Directory -Force $releaseModelDir | Out-Null
             $releaseModelPath = Join-Path $releaseModelDir 'tiny.gguf'

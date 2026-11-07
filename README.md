@@ -152,3 +152,15 @@ instalar uma habilidade, escolha até três no compositor da conversa ou do agen
 Plugins ativos continuam sujeitos a Internet, Plan/Build e às permissões escolhidas.
 
 [Catálogo, comportamento e limites](docs/ATUALIZACAO_0_5_0.md).
+
+
+A atualização também importa **SKILL.md** e ZIPs nos layouts **plugin.json** portátil
+ou **.codex-plugin/plugin.json** legado. Habilidades podem ser carregadas pelo modelo
+sob demanda, respeitando a política de seleção automática do pacote. Referências
+são lidas por trechos; scripts exigem Agente Build e a aprovação correspondente.
+
+Em **Conexões MCP**, cadastre STDIO ou Streamable HTTP, autorize a conexão e escolha
+as ferramentas. Bearer/variáveis de sessão são próprios de cada serviço; não há
+transferência automática de conta ou OAuth do ChatGPT. Servidores e scripts externos
+podem precisar de Python, Node ou outro programa instalado; a inferência local segue
+incluída no EXE. Veja os limites e componentes suportados no guia da atualização.

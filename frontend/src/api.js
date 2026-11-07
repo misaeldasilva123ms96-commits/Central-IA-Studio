@@ -20,3 +20,8 @@ export async function uploadFile(file){
  if(!res.ok){const error=await res.json().catch(()=>({detail:res.statusText}));throw Error(error.detail||'Não foi possível anexar o arquivo.');}
  return res.json();
 }
+
+export async function importExtension(file,previewOnly=true,digest=''){
+ const res=await fetch('/api/extensions/import?name='+encodeURIComponent(file.name)+'&confirm='+(!previewOnly),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Central-Token':token,'X-Import-Digest':digest},body:file});
+ const data=await res.json();if(!res.ok)throw Error(data.detail||'Não foi possível importar o pacote.');return data;
+}

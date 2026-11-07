@@ -24,6 +24,14 @@ class Store:
             CREATE TABLE IF NOT EXISTS message_attachments(message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE, attachment_id TEXT NOT NULL REFERENCES attachments(id), PRIMARY KEY(message_id,attachment_id));
             CREATE TABLE IF NOT EXISTS agent_revisions(id TEXT PRIMARY KEY, conversation TEXT NOT NULL, path TEXT NOT NULL, previous BLOB, after_sha TEXT NOT NULL, created REAL NOT NULL, restored INTEGER NOT NULL DEFAULT 0);
             ''')
+            with db:
+                db.executescript("""
+                CREATE TABLE IF NOT EXISTS imported_extensions(id TEXT PRIMARY KEY,parent TEXT,kind TEXT NOT NULL,name TEXT NOT NULL,description TEXT NOT NULL,version TEXT NOT NULL,instructions TEXT NOT NULL DEFAULT '',root TEXT NOT NULL DEFAULT '',source TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS extension_files(package TEXT NOT NULL REFERENCES imported_extensions(id) ON DELETE CASCADE,path TEXT NOT NULL,data BLOB NOT NULL,mode INTEGER NOT NULL DEFAULT 384,PRIMARY KEY(package,path));
+                CREATE TABLE IF NOT EXISTS mcp_servers(id TEXT PRIMARY KEY,package TEXT,name TEXT NOT NULL,config TEXT NOT NULL,selected TEXT NOT NULL DEFAULT '[]',tools TEXT NOT NULL DEFAULT '[]');
+                """)
+            imported_columns={row[1] for row in db.execute('PRAGMA table_info(imported_extensions)')}
+            if 'implicit' not in imported_columns:db.execute('ALTER TABLE imported_extensions ADD COLUMN implicit INTEGER NOT NULL DEFAULT 1')
             revision_columns={row[1] for row in db.execute('PRAGMA table_info(agent_revisions)')}
             if 'restored' not in revision_columns:db.execute('ALTER TABLE agent_revisions ADD COLUMN restored INTEGER NOT NULL DEFAULT 0')
             attachment_columns={row[1] for row in db.execute('PRAGMA table_info(attachments)')}
