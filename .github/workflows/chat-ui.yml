@@ -31,8 +31,14 @@ jobs:
       - run: python tests/browser/check_catalog05.py
         env:
           CENTRAL_USE_BUNDLED_BROWSER: '1'
+      - run: python tests/browser/check_work_panel.py
+        env:
+          CENTRAL_USE_BUNDLED_BROWSER: '1'
+          CENTRAL_QA_DIR: ${{ runner.temp }}/central-work-panel-qa
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Chat-layout-regressions
-          path: work/qa/
+          path: |
+            work/qa/
+            ${{ runner.temp }}/central-work-panel-qa/

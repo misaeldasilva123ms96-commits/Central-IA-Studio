@@ -560,9 +560,10 @@ def create_app(data_dir=None):
                         if c or r:
                             first = first or time.perf_counter()
                             content += c
-                            if c:
-                                if timeline and timeline[-1]['type']=='text':timeline[-1]['content']+=c
-                                else:timeline.append({'type':'text','content':c})
+                            for block_type,part in [('reasoning',r),('text',c)]:
+                                if part:
+                                    if timeline and timeline[-1]['type']==block_type:timeline[-1]['content']+=part
+                                    else:timeline.append({'type':block_type,'content':part})
                             reasoning += r
                             yield sse('delta',{'content':c,'reasoning':r})
                         finish = choice.get('finish_reason') or finish

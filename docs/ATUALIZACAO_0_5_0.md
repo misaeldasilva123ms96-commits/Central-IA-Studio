@@ -208,3 +208,38 @@ O teste da interface online usa uma fonte determinística; a consulta às quatro
 fontes públicas e o download real foram verificados separadamente. A regressão
 de chat também verifica que horários não entram na cópia do conteúdo e que o
 protocolo textual mantém streaming e métricas de decodificação.
+
+
+### Painel de trabalho e ajustes da sessão
+
+O horário das mensagens do usuário agora ocupa uma linha no fluxo normal, fora
+do balão. Isso evita sobreposição em mensagens curtas como “ola”, inclusive em
+320 pixels de largura.
+
+O painel de trabalho agrupa pensamento retornado pelo motor, comentários
+intermediários e chamadas de ferramentas. Enquanto o modelo trabalha, ele abre e
+mostra o tempo decorrido. Recolhe ao começar o texto da resposta e ao concluir;
+pode ser expandido pelo usuário. Pedidos de aprovação mantêm o painel aberto.
+A nova sequência salva também os trechos de pensamento, preservando sua posição
+em relação às ferramentas após recarregar. Históricos anteriores sem essa
+sequência continuam exibindo o pensamento agregado que havia sido salvo.
+Somente o pensamento efetivamente retornado pelo motor é mostrado. O cronômetro
+atualiza um componente próprio; não redesenha os trechos de pensamento a cada
+segundo. O tempo final é o tempo total da geração registrado pelo backend.
+
+O botão de interromper do topo foi removido. O botão no compositor continua
+interrompendo geração e ferramentas. Ao navegar para outra área durante uma
+tarefa, uma faixa permite voltar à conversa ou ao agente em execução.
+
+Ajustes da sessão inclui modelo/contexto carregado, instruções e exportação do
+histórico, modo de resposta, pensamento, saída, temperatura, amostragem avançada,
+contexto/CPU, lote, cache, Flash Attention, visão e template. Campos que exigem
+reinício estão marcados. O perfil é validado pelo backend ao salvar, com erro
+local e opção de exportar JSON. Durante a geração, os campos ficam bloqueados.
+
+O teste `tests/browser/check_work_panel.py` usa o Studio e uma fixture HTTP de
+modelo pausada em cada etapa. Verifica cronômetro, ordem pensamento/ferramenta,
+recolhimento antes do fim do streaming, histórico, aprovação nos demais roteiros,
+horário em mensagem curta, salvamento e bloqueio do perfil, um único botão de
+interromper e ausência de erros no navegador. As capturas dessa revisão ficam
+no artefato de testes de interface do GitHub, fora das fontes do produto.

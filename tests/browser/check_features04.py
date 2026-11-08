@@ -326,6 +326,7 @@ async def check(port,project):
         await expect(sequence).to_have_count(3)
         assert await sequence.evaluate_all("els=>els.map(el=>el.dataset.timelineKind)")==['text','activity','text']
 
+        await host.locator('.message.assistant').last.locator('.work-panel>summary').click()
         await page.screenshot(path=str(out/'agente-sequencia.png'))
         edited=host.locator('.tool-activity.done').filter(has_text='Editar arquivo').last
         await edited.locator('summary').click()
