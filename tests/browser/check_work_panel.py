@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory() as directory:
         else:raise RuntimeError('Backend did not start')
         with sync_playwright() as p:
             browser=p.chromium.launch(executable_path=None if os.environ.get('CENTRAL_USE_BUNDLED_BROWSER')=='1' else '/usr/bin/chromium',args=['--no-sandbox'])
-            context=browser.new_context(viewport={'width':1366,'height':900},timezone_id='America/Sao_Paulo');page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            context=browser.new_context(viewport={'width':1366,'height':900},timezone_id='America/Sao_Paulo');page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)));page.on('console',lambda m:errors.append(m.type+': '+m.text) if m.type in ('error','warning') else None)
             page.goto(f'http://127.0.0.1:{port}')
             assert page.title() and 'Central' in page.title();expect(page.get_by_text('Conectado',exact=True)).to_be_visible()
             page.get_by_role('button',name='Ajustes da sessão',exact=True).click()
@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory() as directory:
             page.screenshot(path=str(out/'ajustes-avancados.png'))
             dialog.get_by_role('button',name='Salvar parâmetros',exact=True).click()
             expect(page.get_by_role('alert')).to_contain_text('Perfil salvo')
-            model=page.request.get(f'http://127.0.0.1:{port}/api/engine').json()['model']
+            model='default'  # External engine without a selected local model uses the default profile.
             from urllib.parse import quote
             saved=page.request.get(f'http://127.0.0.1:{port}/api/profiles?model='+quote(model,safe='')).json()
             assert saved['top_p']==.82 and saved['temperature']==.55
@@ -130,6 +130,7 @@ with tempfile.TemporaryDirectory() as directory:
             page.get_by_role('button',name='Ajustes da sessão',exact=True).click()
             expect(dialog.get_by_role('heading',name='Ajustes da sessão',exact=True)).to_be_visible()
             assert page.evaluate('document.documentElement.scrollWidth')<=390
+            expect(dialog.get_by_label('Temperatura',exact=True)).to_have_value('0.55')
             page.screenshot(path=str(out/'ajustes-mobile.png'))
             assert not errors,errors
             browser.close()
