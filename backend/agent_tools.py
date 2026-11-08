@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 import psutil
 from .web import fetch_page,search_web
+from .utility_tools import utility_definitions,execute as execute_utility,NAMES as UTILITY_NAMES
 
 SENSITIVE={'.env','.git','.ssh','.aws','.azure','.kube','credentials','id_rsa','id_ed25519','secrets.json'}
 
@@ -33,7 +34,7 @@ def definitions(kind,mode,workspace,internet,attachments=False):
         if mode=='build':
             result += [tool('write_file','Criar ou substituir arquivo de texto. Informe o conteúdo completo.',{'path':{'type':'string'},'content':{'type':'string'}},['path','content']),
                        tool('run_command','Executar um programa no projeto; envie argv em lista, sem shell implícito. Limite 60 s.',{'argv':{'type':'array','items':{'type':'string'}}},['argv'])]
-    return result
+    return result+utility_definitions()
 
 
 class ApprovalBroker:
@@ -85,6 +86,8 @@ def prepare_action(name,args,kind,mode,workspace,internet,access,attachment_ids=
         if not isinstance(value,str) or not value or len(value)>(400 if name=='web_search' else 2048):raise ValueError('Busca ou URL inválida.')
         action.update(summary=value,approval=False)
         action['preview']='Esta busca ou URL será enviada a serviços públicos de pesquisa/leitura (Bing, DuckDuckGo ou Jina Reader, quando necessário). Anexos não são enviados automaticamente.'
+    elif name in UTILITY_NAMES:
+        action.update(approval=False,summary='Ferramenta local de cálculo/dados')
     elif name=='run_command':
         argv=args['argv']
         if not isinstance(argv,list) or not argv or len(argv)>32 or any(not isinstance(x,str) or not x or '\x00' in x for x in argv) or sum(map(len,argv))>16000:
@@ -113,13 +116,13 @@ def prepare_action(name,args,kind,mode,workspace,internet,access,attachment_ids=
 
 
 def public_action(action):
-    return {key:action[key] for key in ['name','arguments','summary','preview','cwd','path','outside'] if key in action}
+    return {key:action[key] for key in ['name','arguments','summary','preview','cwd','path','outside','display_name'] if key in action}
 
 
-async def run_command(argv,cwd,abort):
+async def run_command(argv,cwd,abort,env=None):
     flags={'creationflags':0x00000200} if os.name=='nt' else {'start_new_session':True}
     process=await asyncio.create_subprocess_exec(*argv,cwd=cwd,stdin=asyncio.subprocess.DEVNULL,
-            stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.STDOUT,**flags)
+            stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.STDOUT,env=env,**flags)
     async def stop():
         if os.name=='nt':
             if process.returncode is None:
@@ -156,6 +159,7 @@ async def run_command(argv,cwd,abort):
 async def execute_action(action,store,cid,abort):
     if abort.is_set():raise ValueError('Tarefa interrompida.')
     name=action['name'];args=action['arguments']
+    if name in UTILITY_NAMES:return execute_utility(name,args)
     if name in ['read_attachment','search_attachment']:
         with store.db() as db:
             row=db.execute('SELECT a.name,a.text,a.warning FROM attachments a JOIN message_attachments l ON l.attachment_id=a.id JOIN messages m ON m.id=l.message_id WHERE a.id=? AND m.conversation=?',(args['id'],cid)).fetchone()

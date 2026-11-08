@@ -1,7 +1,7 @@
 """Inventário de licenças instaladas do runtime e ferramentas de build."""
 from importlib import metadata
 from pathlib import Path
-packages=['pillow','pypdf','fastapi','starlette','pydantic','pydantic-core','annotated-types','typing-extensions','uvicorn','click','h11','httpx','httpcore','anyio','sniffio','idna','certifi','psutil','pyinstaller','pyinstaller-hooks-contrib','altgraph','packaging','pefile','pywin32-ctypes']
+packages=['mcp','PyYAML','pydantic-settings','httpx-sse','jsonschema','jsonschema-specifications','referencing','rpds-py','attrs','sse-starlette','PyJWT','cryptography','cffi','pycparser','python-multipart','python-dotenv','pywin32','pillow','pypdf','fastapi','starlette','pydantic','pydantic-core','annotated-types','typing-extensions','uvicorn','click','h11','httpx','httpcore','anyio','sniffio','idna','certifi','psutil','pyinstaller','pyinstaller-hooks-contrib','altgraph','packaging','pefile','pywin32-ctypes']
 output=['AVISOS PYTHON — versões observadas no ambiente de geração. O build Windows regenera este inventário.\n']
 for name in packages:
     try: dist=metadata.distribution(name)

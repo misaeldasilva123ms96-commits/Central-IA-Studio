@@ -1,4 +1,5 @@
 import asyncio
+import re
 import csv
 import io
 import json
@@ -26,10 +27,24 @@ from .folders import browse_folders
 from .generation_stats import DEFAULT_SYSTEM_PROMPT,backend_timings,estimate_seconds
 from .attachments import MAX_FILE,extract,public_attachment,model_message
 from .agent_tools import ApprovalBroker,definitions
+from .extensions import catalog,change as change_extension,tools_for,apply_skills,resource_definition,automatic_skills,automatic_context,activation_definition
 from .turns import configure_messages,run_turn
+from .mcp_bridge import MCPBridge
+from .import_packages import read_package,public_preview,install_package,MAX_UPLOAD
 from .revisions import undo_revision
+from .online_catalog import OnlineCatalog,SOURCES
 
 ROOT = Path(__file__).resolve().parent.parent
+
+class OnlineBrowseInput(BaseModel):
+    url: str = Field(max_length=1000)
+
+class OnlinePreviewInput(OnlineBrowseInput):
+    key: str = Field(max_length=64)
+
+class OnlineInstallInput(BaseModel):
+    ticket: str = Field(max_length=64)
+    digest: str = Field(max_length=64)
 
 class ConversationInput(BaseModel):
     title: str = Field('Nova conversa',min_length=1,max_length=200)
@@ -44,11 +59,32 @@ class GenerateInput(BaseModel):
     action: str = 'send'
     benchmark: bool = False
     attachments: list[str] = Field(default_factory=list,max_length=6)
+    skills: list[str] = Field(default_factory=list,max_length=3)
+    auto_skills: bool = True
     kind: Literal['chat','agent'] = 'chat'
     agent_mode: Literal['build','plan'] = 'build'
     access: Literal['ask','auto','full'] = 'ask'
     internet: bool = False
     workspace: str = Field('',max_length=4096)
+
+class ExtensionInput(BaseModel):
+    action: Literal['install','enable','disable','remove','auto_enable','auto_disable']
+
+class AutomationInput(BaseModel):
+    enabled: bool
+
+class MCPConfigInput(BaseModel):
+    name: str
+    config: dict
+
+class MCPConnectInput(BaseModel):
+    confirmed: Literal[True]
+    token: str = ''
+    env: dict[str,str] = Field(default_factory=dict)
+    headers: dict[str,str] = Field(default_factory=dict)
+
+class MCPToolsInput(BaseModel):
+    names: list[str] = Field(default_factory=list,max_length=8)
 
 class StartInput(BaseModel):
     path: str
@@ -67,6 +103,7 @@ class EditInput(BaseModel):
 def create_app(data_dir=None):
     store = Store(data_dir or os.environ.get('CENTRAL_DATA_DIR') or ROOT/'data')
     engine = Engine(store)
+    mcp = MCPBridge(store)
     approvals = ApprovalBroker()
     uploads = asyncio.Semaphore(2)
     token = secrets.token_urlsafe(32)
@@ -80,13 +117,14 @@ def create_app(data_dir=None):
     async def lifespan(app):
         logger.info('Gerenciador iniciado')
         yield
+        await mcp.close()
         await asyncio.to_thread(engine.stop)
         logger.info('Gerenciador encerrado')
         handler.close()
         logger.removeHandler(handler)
 
     app = FastAPI(title='Central IA Studio',lifespan=lifespan,docs_url=None,redoc_url=None)
-    app.state.store, app.state.engine, app.state.approvals = store, engine, approvals
+    app.state.store, app.state.engine, app.state.approvals, app.state.mcp = store, engine, approvals, mcp
 
     @app.middleware('http')
     async def local_security(request, call_next):
@@ -130,7 +168,7 @@ def create_app(data_dir=None):
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.4.0'}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.5.0','extensions':catalog(store),'skill_automation':store.get('skill_automation',{'enabled':True})}
 
     @app.put('/api/settings')
     def settings(value: Settings):
@@ -300,6 +338,116 @@ def create_app(data_dir=None):
             return Response(body,media_type='text/markdown',headers={'Content-Disposition':'attachment; filename="conversa.md"'})
         return Response(json.dumps(messages,ensure_ascii=False,indent=2),media_type='application/json',headers={'Content-Disposition':'attachment; filename="conversa.json"'})
 
+    online = OnlineCatalog()
+
+    @app.get('/api/extensions/sources')
+    def extension_sources():return {'defaults':SOURCES,'custom':store.get('extension_sources',[])}
+
+    @app.post('/api/extensions/online/browse')
+    async def online_browse(value: OnlineBrowseInput):
+        try:
+            async with asyncio.timeout(90):result=await online.browse(value.url)
+        except (TimeoutError,httpx.HTTPError) as error:raise ValueError('Não foi possível consultar o catálogo online. Verifique a conexão e tente novamente.') from error
+        custom=store.get('extension_sources',[])
+        if value.url not in [s['url'] for s in SOURCES] and value.url not in custom:
+            store.put('extension_sources',(custom+[value.url])[-12:])
+        return result
+
+    @app.post('/api/extensions/online/preview')
+    async def online_preview(value: OnlinePreviewInput):
+        try:
+            async with asyncio.timeout(120):ticket,package,entry=await online.preview(value.url,value.key)
+        except (TimeoutError,httpx.HTTPError) as error:raise ValueError('Não foi possível baixar o pacote. Verifique a conexão e tente novamente.') from error
+        return public_preview(package)|{'ticket':ticket,'entry':entry}
+
+    @app.post('/api/extensions/online/install')
+    async def online_install(value: OnlineInstallInput):
+        preview=online.reviewed(value.ticket,value.digest)
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de instalar.')
+        async with engine.generation_lock:
+            source=preview['entry']['url']
+            existing=next((i for i in catalog(store) if i.get('source')==source and not i.get('parent')),None)
+            if existing:
+                key=existing['id'];await asyncio.to_thread(change_extension,store,key,'install')
+            else:key=await asyncio.to_thread(install_package,store,preview['package'])
+        return {'id':key,'items':catalog(store),'servers':mcp.servers()}
+
+    @app.get('/api/extensions')
+    def extensions_catalog():
+        return {'items':catalog(store)}
+
+    @app.get('/api/extensions/automation')
+    def automation_settings():return store.get('skill_automation',{'enabled':True})
+
+    @app.put('/api/extensions/automation')
+    async def set_automation(value: AutomationInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para alterar a seleção automática.')
+        async with engine.generation_lock:store.put('skill_automation',value.model_dump())
+        return value.model_dump()
+
+    @app.patch('/api/extensions/{key}')
+    async def update_extension(key: str,value: ExtensionInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de alterar extensões.')
+        async with engine.generation_lock:
+            items=await asyncio.to_thread(change_extension,store,key,value.action)
+            active={item['id'] for item in items if item['enabled'] and item['installed']}
+            for server in mcp.servers():
+                if server['package'] and server['package'] not in active:await mcp.disconnect(server['id'])
+            return {'items':items}
+
+    @app.post('/api/extensions/import')
+    async def import_extension(request: Request,name: str,confirm: bool=False):
+        data=bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data)>MAX_UPLOAD:raise ValueError('Pacote limitado a 8 MiB.')
+        package=await asyncio.to_thread(read_package,bytes(data),name)
+        if not confirm:return public_preview(package)
+        if request.headers.get('x-import-digest')!=package['digest']:raise ValueError('Revise o pacote antes de confirmar a instalação.')
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de instalar.')
+        async with engine.generation_lock:
+            key=await asyncio.to_thread(install_package,store,package)
+        return {'id':key,'items':catalog(store),'servers':mcp.servers()}
+
+    @app.get('/api/mcp')
+    def mcp_list():return {'servers':mcp.servers()}
+
+    @app.post('/api/mcp')
+    async def mcp_add(value: MCPConfigInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para alterar conexões.')
+        async with engine.generation_lock:key=mcp.save(value.name,value.config)
+        return {'id':key,'servers':mcp.servers()}
+
+    @app.post('/api/mcp/{key}/connect')
+    async def mcp_connect(key: str,value: MCPConnectInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para conectar.')
+        if len(value.token)>4096 or len(value.env)>32 or len(value.headers)>16:raise ValueError('Credenciais excedem o limite.')
+        for field in [value.env,value.headers]:
+            if any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_-]{0,63}',k) or len(v)>4096 or '\r' in v or '\n' in v for k,v in field.items()):raise ValueError('Credencial inválida.')
+        if any(k.lower() in ['host','content-length','cookie','set-cookie'] for k in value.headers):raise ValueError('Cabeçalho reservado.')
+        async with engine.generation_lock:servers=await mcp.connect(key,{'token':value.token,'env':value.env,'headers':value.headers})
+        return {'servers':servers}
+
+    @app.post('/api/mcp/{key}/disconnect')
+    async def mcp_disconnect(key: str):
+        if engine.generation_lock.locked():raise HTTPException(409,'Interrompa a tarefa antes de desconectar.')
+        async with engine.generation_lock:await mcp.disconnect(key)
+        return {'servers':mcp.servers()}
+
+    @app.put('/api/mcp/{key}/tools')
+    async def mcp_select(key: str,value: MCPToolsInput):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para alterar ferramentas.')
+        async with engine.generation_lock:mcp.select(key,value.names)
+        return {'servers':mcp.servers()}
+
+    @app.delete('/api/mcp/{key}')
+    async def mcp_delete(key: str):
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar antes de remover a conexão.')
+        async with engine.generation_lock:
+            await mcp.disconnect(key)
+            with store.db() as db:db.execute('DELETE FROM mcp_servers WHERE id=?',(key,))
+        return {'servers':mcp.servers()}
+
     @app.post('/api/generate')
     async def generate(value: GenerateInput, request: Request):
         ensure_conversation(value.conversation)
@@ -341,11 +489,14 @@ def create_app(data_dir=None):
                 if image_count+sum(a['kind']=='image' for a in selected_attachments)>8:
                     raise ValueError('Esta conversa excederia oito imagens. Use uma nova conversa.')
                 messages.append(model_message(store,{'role':'user','content':value.content,'attachments':selected_attachments}))
-            options={k:getattr(value,k) for k in ['kind','agent_mode','access','internet','workspace']}
+            options={k:getattr(value,k) for k in ['kind','agent_mode','access','internet','workspace','skills','auto_skills']}
             document_ids=list(dict.fromkeys(a['id'] for m in history for a in m.get('attachments',[]) if a['kind']=='document'))
             if value.action=='send':document_ids+= [a['id'] for a in selected_attachments if a['kind']=='document' and a['id'] not in document_ids]
-            tool_defs=definitions(value.kind,value.agent_mode,value.workspace,value.internet,bool(document_ids))
-            tool_options=options | {'attachment_ids':document_ids}
+            messages=apply_skills(store,messages,value.skills)
+            eligible_skills=automatic_skills(store,value.skills,value.auto_skills)
+            messages=automatic_context(messages,eligible_skills)
+            tool_defs=tools_for(store,definitions(value.kind,value.agent_mode,value.workspace,value.internet,bool(document_ids)))+activation_definition(eligible_skills)+resource_definition(store,value.skills+[s['id'] for s in eligible_skills],value.kind,value.agent_mode,value.workspace)+mcp.definitions(value.kind,value.agent_mode,value.internet)
+            tool_options=options | {'attachment_ids':document_ids,'mcp':mcp,'eligible_skills':[s['id'] for s in eligible_skills],'loaded_skills':list(value.skills)}
             native_tools=(await engine.status()).get('tools') is True if tool_defs else False
             messages=configure_messages(messages,tool_defs,native_tools,value.agent_mode if value.kind=='agent' else 'conversa')
             payload, limits = await engine.prepare(messages,value.profile,tool_defs if native_tools else None)
@@ -376,6 +527,7 @@ def create_app(data_dir=None):
 
         async def events():
             start_time, first = time.perf_counter(), None
+            created = time.time()
             content, reasoning, finish, usage = '', '', None, {}
             timings = {}
             activities = {}
@@ -408,9 +560,10 @@ def create_app(data_dir=None):
                         if c or r:
                             first = first or time.perf_counter()
                             content += c
-                            if c:
-                                if timeline and timeline[-1]['type']=='text':timeline[-1]['content']+=c
-                                else:timeline.append({'type':'text','content':c})
+                            for block_type,part in [('reasoning',r),('text',c)]:
+                                if part:
+                                    if timeline and timeline[-1]['type']==block_type:timeline[-1]['content']+=part
+                                    else:timeline.append({'type':block_type,'content':part})
                             reasoning += r
                             yield sse('delta',{'content':c,'reasoning':r})
                         finish = choice.get('finish_reason') or finish
@@ -438,7 +591,7 @@ def create_app(data_dir=None):
                     'truncated':finish=='length','error':error,'backend_timings':timings,
                     'engine_kind':engine.kind,'profile':value.profile.model_dump(),'activities':list(activities.values()),'timeline':timeline,'session':options}
                 try:
-                    store.add_message(value.conversation,'assistant',content,reasoning,stats)
+                    store.add_message(value.conversation,'assistant',content,reasoning,stats,created=created)
                     if value.benchmark:
                         library = discover(Settings(**store.get('settings',{})).folders)['models']
                         active = next((m for m in library if m['path']==engine.active_path),{})

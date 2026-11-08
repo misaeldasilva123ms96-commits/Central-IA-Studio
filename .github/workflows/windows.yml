@@ -31,7 +31,10 @@ jobs:
         id: engine_source
         shell: pwsh
         run: |
-          $same = (git rev-parse HEAD:engine) -eq '569d274c6efd064a2ce9ffaed17b993e91c99a32'
+          # The second immutable tree only adapts the tiny Studio smoke fixture
+          # to preinstalled extensions. CMake, C++ and all build/package scripts
+          # are identical to the approved tree; any other tree forces a rebuild.
+          $same = (git rev-parse HEAD:engine) -in @('569d274c6efd064a2ce9ffaed17b993e91c99a32','af6a8fecca0582bc0b33b535fc57f5c2075a890f')
           "reuse=$($same.ToString().ToLower())" >> $env:GITHUB_OUTPUT
       - name: Recuperar motor aprovado quando as fontes forem identicas
         id: engine_cache
@@ -114,6 +117,20 @@ jobs:
             $releasePdf = Invoke-RestMethod 'http://127.0.0.1:8765/api/attachments?name=documento.pdf' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $pdfFile
             if ($releasePdf.kind -ne 'document') { throw 'Leitor PDF do EXE falhou' }
             Write-Host 'Studio EXE: extracao isolada de texto, PNG e PDF passou.'
+            $exampleZip = Join-Path $PWD 'work/package smoke/plugin-example.zip'
+            Invoke-WebRequest 'http://127.0.0.1:8765/central-demo-plugin.zip' -OutFile $exampleZip
+            $previewPlugin = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions/import?name=demo.zip' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $exampleZip
+            if ($previewPlugin.name -ne 'central-demo') { throw 'Preview do plugin no EXE falhou' }
+            $installHeaders = @{ 'X-Central-Token' = $r.token; 'X-Import-Digest' = $previewPlugin.digest }
+            $installedPlugin = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions/import?name=demo.zip&confirm=true' -Method Post -Headers $installHeaders -ContentType 'application/octet-stream' -InFile $exampleZip
+            $mcpId = $installedPlugin.servers[0].id
+            if ($installedPlugin.servers[0].connected) { throw 'Importacao iniciou servidor sem consentimento' }
+            $mcpConnected = Invoke-RestMethod "http://127.0.0.1:8765/api/mcp/$mcpId/connect" -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{"confirmed":true}'
+            if (!$mcpConnected.servers[0].connected -or $mcpConnected.servers[0].tools[0].name -ne 'demo_sum') { throw 'SDK MCP do EXE congelado nao conectou/descobriu ferramentas' }
+            Invoke-RestMethod "http://127.0.0.1:8765/api/mcp/$mcpId/disconnect" -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{}' | Out-Null
+            Invoke-RestMethod "http://127.0.0.1:8765/api/extensions/$($installedPlugin.id)" -Method Patch -Headers $releaseHeaders -ContentType 'application/json' -Body '{"action":"disable"}' | Out-Null
+            Write-Host 'Studio EXE: importacao portavel, consentimento e MCP STDIO real passaram.'
+
             $releaseModelDir = Join-Path $PWD 'work/package smoke/modelo de teste'
             New-Item -ItemType Directory -Force $releaseModelDir | Out-Null
             $releaseModelPath = Join-Path $releaseModelDir 'tiny.gguf'
@@ -122,6 +139,11 @@ jobs:
             if ($folderListing.path -ne [IO.Path]::GetFullPath($releaseModelDir)) { throw 'Seletor de pastas do EXE empacotado falhou' }
             $releaseSettings = @{engine_url='http://127.0.0.1:5001'; executable=$r.settings.executable; folders=@($releaseModelDir)}
             Invoke-RestMethod 'http://127.0.0.1:8765/api/settings' -Method Put -Headers $releaseHeaders -ContentType 'application/json' -Body ($releaseSettings | ConvertTo-Json) | Out-Null
+            # Keep the tiny byte-token fixture's context focused on native inference.
+            $releaseExtensions = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions'
+            foreach ($extension in $releaseExtensions.items) {
+              if ($extension.enabled) { Invoke-RestMethod "http://127.0.0.1:8765/api/extensions/$($extension.id)" -Method Patch -Headers $releaseHeaders -ContentType 'application/json' -Body '{"action":"disable"}' | Out-Null }
+            }
             $releaseProfile = $r.profile
             $releaseProfile.cache_kv = 'f16'; $releaseProfile.flash_attention = $false; $releaseProfile.max_output = 8
             $releaseStarted = Invoke-RestMethod 'http://127.0.0.1:8765/api/engine/start' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body (@{path=$releaseModelPath; profile=$releaseProfile} | ConvertTo-Json)

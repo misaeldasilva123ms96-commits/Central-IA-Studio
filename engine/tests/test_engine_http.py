@@ -115,6 +115,11 @@ with tempfile.TemporaryDirectory() as directory:
     from backend.app import create_app
     with TestClient(create_app(Path(directory)/'studio')) as client:
         client.headers['X-Central-Token']=client.get('/api/bootstrap').json()['token']
+        # The random fixture has a byte tokenizer and a tiny context. This smoke
+        # verifies native inference; tool/skill behavior has separate tests.
+        for extension in client.get('/api/extensions').json()['items']:
+            if extension['enabled']:
+                assert client.patch('/api/extensions/'+extension['id'],json={'action':'disable'}).status_code==200
         settings={'engine_url':f'http://127.0.0.1:{port}','executable':str(binary),'folders':[directory]}
         assert client.put('/api/settings',json=settings).status_code==200
         short_profile=profile.model_copy(update={'max_output':8}).model_dump()

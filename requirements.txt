@@ -5,3 +5,5 @@ psutil==7.0.0
 
 Pillow==13.0.0
 pypdf==6.21.4
+mcp==1.30.0
+PyYAML==6.0.3

@@ -331,7 +331,7 @@ def test_tool_loop_preserves_kobold_generation_key(tmp_path):
     async def check():
         engine=FakeEngine()
         options={'kind':'agent','agent_mode':'plan','workspace':str(tmp_path),'internet':False,'access':'ask'}
-        async for _ in run_turn(engine,store,ApprovalBroker(),cid,[{'role':'user','content':'Liste'}],Profile(),{'genkey':'active-key','max_tokens':100},[{'name':'list_files'}],False,options):pass
+        async for _ in run_turn(engine,store,ApprovalBroker(),cid,[{'role':'user','content':'Liste'}],Profile(),{'genkey':'active-key','max_tokens':100},[{'function':{'name':'list_files'}}],False,options):pass
         assert len(engine.seen)==2
         assert all(p['genkey']=='active-key' for p in engine.seen)
     asyncio.run(check())
