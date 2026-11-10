@@ -19,8 +19,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ConfigDict, ValidationError
-from .domain import Profile, Settings, RESTART_FIELDS, bundled_engine
+from .domain import Profile, Settings, RESTART_FIELDS, bundled_engine, MODE_PRESETS
 from .engine import Engine
+from .context_memory import prepare_context,valid_checkpoint
 from .gguf import discover
 from .storage import Store
 from .folders import browse_folders
@@ -45,6 +46,10 @@ class OnlinePreviewInput(OnlineBrowseInput):
 class OnlineInstallInput(BaseModel):
     ticket: str = Field(max_length=64)
     digest: str = Field(max_length=64)
+
+class PresetInput(BaseModel):
+    mode: str
+    profile: Profile = Field(default_factory=Profile)
 
 class ConversationInput(BaseModel):
     title: str = Field('Nova conversa',min_length=1,max_length=200)
@@ -168,7 +173,7 @@ def create_app(data_dir=None):
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.5.0','extensions':catalog(store),'skill_automation':store.get('skill_automation',{'enabled':True})}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'mode_presets':MODE_PRESETS,'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.5.0','extensions':catalog(store),'skill_automation':store.get('skill_automation',{'enabled':True})}
 
     @app.put('/api/settings')
     def settings(value: Settings):
@@ -230,6 +235,28 @@ def create_app(data_dir=None):
     def decide_approval(aid: str, value: ApprovalInput):
         approvals.decide(aid,value.allow)
         return {'received':True}
+
+    context_jobs = {}
+
+    @app.get('/api/conversations/{cid}/context')
+    def conversation_context(cid: str):
+        ensure_conversation(cid)
+        checkpoint=valid_checkpoint(store,cid,store.messages(cid))
+        return {'memory':checkpoint,'job':dict(context_jobs.get(cid,{'stage':'idle'}))}
+
+    @app.delete('/api/conversations/{cid}/context')
+    async def clear_conversation_context(cid: str):
+        ensure_conversation(cid)
+        if engine.generation_lock.locked():raise HTTPException(409,'Aguarde a tarefa terminar para descartar a memória.')
+        async with engine.generation_lock:
+            with store.db() as db:db.execute('DELETE FROM settings WHERE key=?',('context:'+cid,))
+        return {'cleared':True}
+
+    @app.post('/api/profiles/preset')
+    def profile_preset(value: PresetInput):
+        if value.mode=='personalizado':return value.profile.model_copy(update={'mode':'personalizado'}).model_dump()
+        if value.mode not in MODE_PRESETS:raise ValueError('Modo inválido.')
+        return Profile(**(value.profile.model_dump()|MODE_PRESETS[value.mode]['values']|{'mode':value.mode})).model_dump()
 
     @app.get('/api/profiles')
     def profiles(model: str = 'default'):
@@ -315,6 +342,7 @@ def create_app(data_dir=None):
             for aid in attached:
                 db.execute('DELETE FROM attachments WHERE id=? AND id NOT IN (SELECT attachment_id FROM message_attachments)',(aid,))
             db.execute('DELETE FROM settings WHERE key=?',('session:'+cid,))
+            db.execute('DELETE FROM settings WHERE key=?',('context:'+cid,))
             db.execute('DELETE FROM agent_revisions WHERE conversation=?',(cid,))
             db.execute('DELETE FROM settings WHERE key=?',('system:'+cid,))
         return {'deleted':True}
@@ -461,6 +489,7 @@ def create_app(data_dir=None):
         if engine.generation_lock.locked():
             raise HTTPException(409,'Já existe uma geração em andamento')
         await engine.generation_lock.acquire()
+        prepare_started=time.perf_counter()
         try:
             history = store.messages(value.conversation)
             removed = None
@@ -499,15 +528,19 @@ def create_app(data_dir=None):
             tool_options=options | {'attachment_ids':document_ids,'mcp':mcp,'eligible_skills':[s['id'] for s in eligible_skills],'loaded_skills':list(value.skills)}
             native_tools=(await engine.status()).get('tools') is True if tool_defs else False
             messages=configure_messages(messages,tool_defs,native_tools,value.agent_mode if value.kind=='agent' else 'conversa')
-            payload, limits = await engine.prepare(messages,value.profile,tool_defs if native_tools else None)
+            engine.request_key,engine.cancelled=uuid.uuid4().hex,False
+            engine.abort_event.clear()
+            context_jobs[value.conversation]={'stage':'checking'}
+            try:
+                messages,payload,limits=await prepare_context(engine,store,value.conversation,history,messages,value.profile,tool_defs if native_tools else None,context_jobs[value.conversation])
+            except TimeoutError as error:raise ValueError('A compactação excedeu cinco minutos. O histórico original foi preservado.') from error
+            finally:context_jobs.pop(value.conversation,None)
             with store.db() as db:
                 prior = db.execute("SELECT stats FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 200").fetchall()
             limits['estimated_seconds'],limits['estimate_samples'] = estimate_seconds(
                 [json.loads(row['stats']) for row in prior],limits['model'],engine.kind,
                 value.profile.model_dump(),limits['effective_output'])
-            payload['genkey'] = uuid.uuid4().hex
-            engine.request_key, engine.cancelled = payload['genkey'], False
-            engine.abort_event.clear()
+            payload['genkey'] = engine.request_key
             if value.action == 'send':
                 store.add_message(value.conversation,'user',value.content,attachments=list(dict.fromkeys(value.attachments)))
             if removed:
@@ -521,6 +554,8 @@ def create_app(data_dir=None):
             engine.request_key = None
             engine.generation_lock.release()
             raise
+
+        preparation_elapsed=time.perf_counter()-prepare_started
 
         def sse(kind, data):
             return 'event: '+kind+'\ndata: '+json.dumps(data,ensure_ascii=False)+'\n\n'
@@ -586,7 +621,7 @@ def create_app(data_dir=None):
                 elapsed = time.perf_counter()-start_time
                 count = usage.get('completion_tokens')
                 stats = limits | {'usage':usage,'generated_tokens':count,'finish_reason':finish,
-                    'elapsed':elapsed,'ttft':first-start_time if first else None,
+                    'elapsed':elapsed,'preparation_elapsed':preparation_elapsed,'total_elapsed':preparation_elapsed+elapsed,'ttft':first-start_time if first else None,
                     'tokens_per_second':count/elapsed if count is not None and elapsed else None,
                     'truncated':finish=='length','error':error,'backend_timings':timings,
                     'engine_kind':engine.kind,'profile':value.profile.model_dump(),'activities':list(activities.values()),'timeline':timeline,'session':options}

@@ -135,7 +135,7 @@ class Engine:
         except (httpx.HTTPError,ValueError):
             return None
 
-    async def prepare(self, messages, profile, tools=None):
+    async def prepare(self, messages, profile, tools=None, allow_overflow=False):
         status = await self.status()
         if not status['connected'] or not status.get('context'):
             raise ValueError('Conecte um motor com modelo carregado antes de gerar')
@@ -176,10 +176,10 @@ class Engine:
         reserve = max(min(context-4,16),int(context*(.2 if occupied < context*.25 else .35)))
         reserve = 0 if self.kind == 'central' else reserve
         effective = min(profile.max_output,context-occupied-8,context-reserve)
-        if effective < 1:
+        if effective < 1 and not allow_overflow:
             raise ValueError('Contexto esgotado. Reduza o histórico ou reinicie com contexto maior.')
-        payload.update(max_tokens=effective,max_context_length=context)
-        return payload, {'requested_output':profile.max_output,'effective_output':effective,
+        payload.update(max_tokens=max(0,effective),max_context_length=context)
+        return payload, {'requested_output':profile.max_output,'effective_output':max(0,effective),
                          'allocated_context':status['context'],'request_context':context,'occupied_context':occupied,
                          'thinking_requested':thinking,'thinking_applied':applied,'thinking_template_control':support,'thinking_confirmed':False,
                          'warning':warning,
