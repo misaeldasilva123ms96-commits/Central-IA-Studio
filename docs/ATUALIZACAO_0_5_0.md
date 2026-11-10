@@ -243,3 +243,77 @@ recolhimento antes do fim do streaming, histórico, aprovação nos demais rotei
 horário em mensagem curta, salvamento e bloqueio do perfil, um único botão de
 interromper e ausência de erros no navegador. As capturas dessa revisão ficam
 no artefato de testes de interface do GitHub, fora das fontes do produto.
+
+
+### Modos com parâmetros e memória automática
+
+Antes desta revisão, Rápido e Profundo alteravam somente a solicitação de
+pensamento; temperatura e saída continuavam com os valores anteriores. Agora o
+seletor aplica presets reais, compartilhados pelo backend e pelas duas telas.
+
+| Modo | Temperatura | Saída solicitada | Pensamento solicitado |
+| --- | ---: | ---: | --- |
+| Rápido | 0,40 | 512 | Desativado |
+| Equilibrado | 0,70 | 1536 | Padrão do modelo |
+| Preciso | 0,20 | 1024 | Padrão do modelo |
+| Código | 0,25 | 2048 | Padrão do modelo |
+| Criativo | 0,95 | 2048 | Padrão do modelo |
+| Profundo | 0,60 | 3072 | Ativado |
+| Personalizado | Definida pelo usuário | Definida pelo usuário | Definido pelo usuário |
+
+Os presets também definem Top-P, Top-K, Min-P e penalidade de repetição. Os valores
+completos estão em `MODE_PRESETS`, em `backend/domain.py`, e no campo
+`mode_presets` do bootstrap. Clientes da API podem aplicar um preset explicitamente
+com `POST /api/profiles/preset`, passando mode e profile. Importar/salvar um perfil
+preserva seus valores explícitos; o nome do modo não sobrescreve silenciosamente
+parâmetros enviados pela API. Rápido e Profundo mantêm prioridade sobre o campo thinking, como antes; Personalizado respeita esse campo. Na interface, alterar manualmente saída, pensamento
+ou amostragem muda o seletor para Personalizado. Contexto, CPU, RAM, cache,
+projetor, template e opções de compactação são preservados ao trocar o modo.
+Preciso reduz a diversidade da amostragem; não garante exatidão factual. Pensamento
+e velocidade continuam dependentes do modelo e do template.
+
+Contexto é a janela total compartilhada entre instruções, histórico, anexos,
+ferramentas e a resposta. Saída máxima é o teto por resposta, incluindo pensamento
+emitido pelo motor. O limite efetivo é calculado com a contagem do próprio motor
+e a janela realmente carregada. Um preset não aumenta contexto nem RAM.
+
+A compactação automática começa ligada, com gatilho padrão de 80% da janela
+ou menos espaço do que a reserva de saída desejada. Preserva dois turnos recentes
+(contando o envio atual), e solicita uma memória de até 512 tokens, limitada
+adicionalmente pela janela. Esses controles podem ser ajustados/desativados em
+Memória da conversa. A compactação acontece entre envios, antes da resposta;
+ferramentas de uma tarefa em andamento continuam sujeitas aos limites da janela.
+
+O mesmo motor local resume o prefixo antigo em lotes medidos pelo tokenizer,
+com no máximo oito etapas e cinco minutos por tentativa. Não usa ferramentas,
+não acessa internet e permite interrupção pelo botão normal. A memória anterior
+é incorporada ao resumir novos trechos. Conteúdo resumido é marcado como dado
+não confiável dentro da primeira mensagem preservada do usuário, sem promover
+esse conteúdo a instruções de sistema. Mensagem atual, instruções atuais e
+turnos recentes não são cortados. Resultados extensos de ferramentas entram como
+trechos marcados, com referências; estado de revisões/desfazer também é registrado.
+Imagens antigas são referenciadas por nome/ID, sem inventar uma análise visual.
+
+O checkpoint fica no SQLite e no backup, com hash das mensagens e do estado das
+ferramentas cobertas. Editar mensagens antigas ou desfazer uma ação invalida o
+resumo. O histórico original permanece disponível para leitura e exportação.
+A interface permite ver e descartar a memória. Desativar a compactação impede
+seu uso na próxima geração. Aumentar a quantidade de turnos preservados também
+reconsidera o checkpoint. Somente um resumo concluído que reduz a entrada e
+permite gerar substitui a memória anterior. Falha, resumo truncado ou cancelamento
+não apagam mensagens nem alteram sua ordem. Se a mensagem atual/instruções não
+couberem sozinhas, o app informa o limite; resumir não amplia a janela física.
+
+Resumos podem omitir ou distorcer detalhes e a primeira compactação pode demorar
+no CPU. Não é uma compressão sem perdas. O painel mostra progresso, mensagens
+cobertas e contagem de entrada antes/depois. O tempo total de trabalho inclui a
+preparação/compactação; velocidade de geração e tokens de saída continuam
+medidos para a resposta principal.
+
+Validação desta revisão: 124 testes de backend, incluindo envio efetivo dos valores
+dos seis presets ao motor, orçamento de tokens, resumo em lotes, persistência,
+backup, reutilização, invalidação, descarte e cancelamento. O roteiro
+`tests/browser/check_presets_context.py` verifica os sete modos em ambas as telas,
+valores visíveis, Personalizado ao editar, memória preservada após recarregar,
+originais intactos, descarte e tela pequena. Modelos HTTP controlados verificam
+o fluxo; a qualidade semântica no modelo treinado do usuário exige teste real.

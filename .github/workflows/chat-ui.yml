@@ -35,6 +35,10 @@ jobs:
         env:
           CENTRAL_USE_BUNDLED_BROWSER: '1'
           CENTRAL_QA_DIR: ${{ runner.temp }}/central-work-panel-qa
+      - run: python tests/browser/check_presets_context.py
+        env:
+          CENTRAL_USE_BUNDLED_BROWSER: '1'
+          CENTRAL_QA_DIR: ${{ runner.temp }}/central-presets-context-qa
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -42,3 +46,4 @@ jobs:
           path: |
             work/qa/
             ${{ runner.temp }}/central-work-panel-qa/
+            ${{ runner.temp }}/central-presets-context-qa/
