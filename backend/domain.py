@@ -4,6 +4,15 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
+MODE_PRESETS = {
+ 'rapido': {'name':'Rápido','description':'Respostas curtas; solicita pensamento desativado.','values':{'max_output':512,'temperature':.4,'top_p':.9,'top_k':40,'min_p':.05,'repetition_penalty':1.1,'thinking':'off'}},
+ 'equilibrado': {'name':'Equilibrado','description':'Uso geral com saída moderada e pensamento padrão do modelo.','values':{'max_output':1536,'temperature':.7,'top_p':.95,'top_k':40,'min_p':.05,'repetition_penalty':1.1,'thinking':'default'}},
+ 'preciso': {'name':'Preciso','description':'Menor variação na amostragem; não garante exatidão factual.','values':{'max_output':1024,'temperature':.2,'top_p':.8,'top_k':20,'min_p':.05,'repetition_penalty':1.05,'thinking':'default'}},
+ 'codigo': {'name':'Código','description':'Amostragem mais estável e espaço para código e explicações.','values':{'max_output':2048,'temperature':.25,'top_p':.9,'top_k':40,'min_p':.05,'repetition_penalty':1.05,'thinking':'default'}},
+ 'criativo': {'name':'Criativo','description':'Maior diversidade para escrita e exploração de ideias.','values':{'max_output':2048,'temperature':.95,'top_p':.98,'top_k':80,'min_p':.02,'repetition_penalty':1.12,'thinking':'default'}},
+ 'profundo': {'name':'Profundo','description':'Saída maior; solicita pensamento ativado e pode demorar mais.','values':{'max_output':3072,'temperature':.6,'top_p':.95,'top_k':40,'min_p':.05,'repetition_penalty':1.1,'thinking':'on'}},
+}
+
 class Profile(BaseModel):
     model_config = ConfigDict(extra='forbid')
     context: int = Field(4096, ge=256, le=524288)
@@ -25,6 +34,10 @@ class Profile(BaseModel):
     template: str = ''
     thinking: str = 'default'
     mode: str = 'personalizado'
+    auto_compact: bool = True
+    compact_trigger: float = Field(.8,ge=.5,le=.95,allow_inf_nan=False)
+    compact_keep_turns: int = Field(2,ge=1,le=10)
+    summary_tokens: int = Field(512,ge=128,le=2048)
 
     @field_validator('batch_size')
     @classmethod
@@ -50,7 +63,7 @@ class Profile(BaseModel):
     @field_validator('mode')
     @classmethod
     def modes(cls, v):
-        if v not in ['rapido','profundo','personalizado']:
+        if v not in [*MODE_PRESETS,'personalizado']:
             raise ValueError('Modo inválido')
         return v
 
