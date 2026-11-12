@@ -1,33 +1,39 @@
 # Central IA Studio
 
-Central IA Studio 0.5.0 em validação: aplicativo de IA local em português brasileiro.
+Central IA Studio 0.6.0 em validação: aplicativo de IA local em português brasileiro.
 Interface React compilada, API Python, SQLite, Central Engine CPU incluído e
 compatibilidade com KoboldCpp externo.
 Sem Electron, Docker, Node.js em produção, telemetria ou downloads automáticos.
 
-## Executar o pacote Windows pronto
+## Duas distribuições Windows sincronizadas
 
-Em [Lançamentos](https://github.com/misaeldasilva123ms96-commits/Central-IA-Studio/releases), escolha:
+| Formato | Download | Uso |
+| --- | --- | --- |
+| ONEFILE | **CentralIAStudio.exe** | Um arquivo necessário. Extrai recursos em TEMP ao iniciar. |
+| ONEDIR | **Central-IA-Studio-Windows-x64.zip** | Extrair todo o ZIP; manter executável e pastas juntos. |
+| Fontes | **Central-IA-Studio-Fontes-e-Documentacao.zip** | Fontes completas, licenças e guias; opcional para executar. |
 
-| Arquivo | Para que serve |
-| --- | --- |
-| **Central-IA-Studio-Windows-x64.zip** | Aplicativo pronto com motor. É o único ZIP necessário para usar. |
-| **Central-IA-Studio-Fontes-e-Documentacao.zip** | Fontes completas do Studio e motor, guias e prévias. Opcional para desenvolvimento/consulta. |
-| **SHA256SUMS.txt** | Hashes para conferir os dois downloads. |
+Ambos vêm do mesmo commit/versão e pipeline, com os mesmos recursos e motor.
+Não exigem Python, Node, Docker, WSL nem KoboldCpp externo. Modelos GGUF ficam
+externos e compartilháveis. Plugins externos podem exigir runtimes próprios.
 
-Extraia **todo o ZIP Windows** em uma pasta gravável e abra **ABRIR_CENTRAL_IA.cmd**
-ou `CentralIAStudio\CentralIAStudio.exe`. A pasta inicial contém apenas o iniciador,
-`LEIA-ME.txt` e a pasta `CentralIAStudio`. Mantenha `_internal`, `engine` e `licencas`
-junto ao EXE. Não é necessário instalar Python, Node.js ou KoboldCpp. Os GGUF
-continuam separados, nas pastas escolhidas pelo usuário.
+Dados padrão em **%LOCALAPPDATA%\CentralIAStudio**, compartilhados entre os dois.
+Portátil só com **--portable**, em pasta gravável; **--data-dir** permite um local
+escolhido. Consulte [migração segura](docs/MIGRACAO_DE_DADOS.md) ao atualizar uma
+versão antiga com pasta data. A origem não é apagada nem bases são sobrescritas.
 
-Fontes do Studio seguem disponíveis offline em **Configurações → Código-fonte**.
-O ZIP técnico reúne também a revisão completa do llama.cpp, as adaptações do motor
-e toda a documentação. Não precisa copiar seu conteúdo para a instalação.
+Versão, commit, formato e pasta dos dados ficam em Configurações. Para encerrar,
+use “Encerrar aplicativo” ou Ctrl+C no console. Apenas processos iniciados pelo
+app são encerrados. Navegador abre quando o serviço 127.0.0.1 estiver pronto.
 
-Para atualizar, feche a versão anterior e faça backup da pasta `data`. Extraia em
-pasta nova e copie `data` para junto do novo EXE se quiser preservar histórico e
-configurações. O desempenho com modelos treinados depende do modelo e do hardware.
+Em cada PR/execução manual, o CI constrói e testa cada formato e gera hashes,
+DISTRIBUTIONS.json, TEST_RESULTS.json e BUILD_REPORT.json. Se um falhar, não há
+aprovação parcial nem publicação de executáveis. Releases e merges continuam
+exigindo autorização; o build não publica automaticamente.
+
+Leia [ONEFILE](docs/ONEFILE_WINDOWS.md), [desempenho](docs/OTIMIZACAO_DESEMPENHO.md)
+e [comparação e limites](docs/COMPARACAO_ONEDIR_ONEFILE.md). O ONEFILE não é execução
+em memória e pode ser mais lento na inicialização por extrair a cada uso.
 
 ## Executar a entrega de fontes no Windows
 
@@ -71,7 +77,7 @@ Windows, consulte o script PowerShell e a documentação de instalação.
 
 ## Limites desta entrega
 
-Sem inferência real ou benchmark real de GGUF na nuvem. Compatibilidade das famílias
+O CI testa inferência com um GGUF minúsculo de pesos aleatórios, sem treinamento. Não é um benchmark dos GGUFs reais do usuário. Compatibilidade das famílias
 Qwen, DeepSeek, MiniCPM, Granite, Ministral e LFM não foi certificada por nome.
 O parser informa o que consta no arquivo; o carregamento real decide a compatibilidade.
 O desempenho no i5-7200U/8 GB e o duplo clique Windows **aguardam validação no hardware**.

@@ -4,6 +4,7 @@ import json
 import socket
 import subprocess
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 import httpx
@@ -24,13 +25,34 @@ class Engine:
         self.abort_event = asyncio.Event()
         self.generation_lock = asyncio.Lock()
         self.lifecycle_lock = asyncio.Lock()
+        self._http_pool=None
+        self._http_clients={}
 
     @property
     def url(self):
         return self.store.get('settings',{}).get('engine_url','http://127.0.0.1:5001')
 
-    def client(self):
-        return httpx.AsyncClient(base_url=self.url, timeout=httpx.Timeout(15,read=180), trust_env=False, follow_redirects=False)
+    def _new_client(self):
+        return httpx.AsyncClient(base_url=self.url,timeout=httpx.Timeout(15,read=180),trust_env=False,follow_redirects=False)
+
+    async def open_http_pool(self):
+        self._http_pool=True
+
+    async def close_http_pool(self):
+        clients=list(self._http_clients.values());self._http_clients.clear();self._http_pool=None
+        for client in clients:await client.aclose()
+
+    @asynccontextmanager
+    async def client(self):
+        if not self._http_pool:
+            async with self._new_client() as client:yield client
+        else:
+            url=self.url
+            if url not in self._http_clients:
+                if len(self._http_clients)>=4:
+                    _,old=self._http_clients.popitem();await old.aclose()
+                self._http_clients[url]=self._new_client()
+            yield self._http_clients[url]
 
     async def json(self, path, payload=None):
         async with self.client() as client:

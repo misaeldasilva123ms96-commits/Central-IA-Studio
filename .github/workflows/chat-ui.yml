@@ -1,5 +1,7 @@
 name: Regressao de chat e layout
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:

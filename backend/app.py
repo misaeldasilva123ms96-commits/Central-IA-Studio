@@ -24,6 +24,8 @@ from .engine import Engine
 from .context_memory import prepare_context,valid_checkpoint
 from .gguf import discover
 from .storage import Store
+from .runtime import resource_root,build_info,canonical_executable,DATA_SCHEMA
+from .data_paths import resolve_data
 from .folders import browse_folders
 from .generation_stats import DEFAULT_SYSTEM_PROMPT,backend_timings,estimate_seconds
 from .attachments import MAX_FILE,extract,public_attachment,model_message
@@ -35,7 +37,7 @@ from .import_packages import read_package,public_preview,install_package,MAX_UPL
 from .revisions import undo_revision
 from .online_catalog import OnlineCatalog,SOURCES
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = resource_root()
 
 class OnlineBrowseInput(BaseModel):
     url: str = Field(max_length=1000)
@@ -106,7 +108,9 @@ class EditInput(BaseModel):
 
 
 def create_app(data_dir=None):
-    store = Store(data_dir or os.environ.get('CENTRAL_DATA_DIR') or ROOT/'data')
+    directory=Path(data_dir) if data_dir else resolve_data()[0]
+    store = Store(directory)
+    build=build_info()
     engine = Engine(store)
     mcp = MCPBridge(store)
     approvals = ApprovalBroker()
@@ -120,13 +124,18 @@ def create_app(data_dir=None):
 
     @asynccontextmanager
     async def lifespan(app):
+        await engine.open_http_pool()
         logger.info('Gerenciador iniciado')
-        yield
-        await mcp.close()
-        await asyncio.to_thread(engine.stop)
-        logger.info('Gerenciador encerrado')
-        handler.close()
-        logger.removeHandler(handler)
+        try:yield
+        finally:
+            try:await mcp.close()
+            finally:
+                try:await asyncio.to_thread(engine.stop)
+                finally:
+                    await engine.close_http_pool()
+                    logger.info('Gerenciador encerrado')
+                    handler.close()
+                    logger.removeHandler(handler)
 
     app = FastAPI(title='Central IA Studio',lifespan=lifespan,docs_url=None,redoc_url=None)
     app.state.store, app.state.engine, app.state.approvals, app.state.mcp = store, engine, approvals, mcp
@@ -171,9 +180,10 @@ def create_app(data_dir=None):
         except ValidationError:
             settings = Settings().model_dump()
             warning = 'Configuração inválida preservada no banco. Salve novamente para recuperar.'
+        settings['executable']=canonical_executable(settings['executable'])
         if not settings['executable']:
             settings['executable'] = bundled_engine()
-        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'mode_presets':MODE_PRESETS,'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':'0.5.0','extensions':catalog(store),'skill_automation':store.get('skill_automation',{'enabled':True})}
+        return {'token':token,'settings':settings,'profile':Profile().model_dump(),'mode_presets':MODE_PRESETS,'default_system_prompt':DEFAULT_SYSTEM_PROMPT,'restart_fields':RESTART_FIELDS,'warning':warning,'version':build['version'],'commit':build['commit'],'distribution':build['distribution'],'build':build,'runtime':{'data_directory':str(store.directory),'resources_directory':str(ROOT),'schema':DATA_SCHEMA,'pid':os.getpid(),**getattr(app.state,'runtime_details',{})},'extensions':catalog(store),'skill_automation':store.get('skill_automation',{'enabled':True})}
 
     @app.put('/api/settings')
     def settings(value: Settings):
@@ -185,7 +195,8 @@ def create_app(data_dir=None):
                               (previous.executable or bundled_engine()) != (value.executable or bundled_engine()))
         if connection_changed and (engine.generation_lock.locked() or (engine.process and engine.process.poll() is None)):
             raise ValueError('Pare a geração e o motor gerenciado antes de alterar a conexão')
-        store.put('settings',value.model_dump())
+        persistent=value.model_dump();persistent['executable']=canonical_executable(persistent['executable'])
+        store.put('settings',persistent)
         logger.info('Configuração salva')
         return value.model_dump()
 
@@ -291,6 +302,7 @@ def create_app(data_dir=None):
             await engine.abort()
         async with engine.lifecycle_lock:
             await asyncio.to_thread(engine.stop)
+        await engine.close_http_pool()
         logger.info('Parada do motor gerenciado solicitada')
         return {'stopped':True}
 
@@ -687,10 +699,29 @@ def create_app(data_dir=None):
     def backup():
         return {'file':store.backup().name}
 
+    @app.post('/api/shutdown')
+    async def shutdown():
+        callback=getattr(app.state,'request_shutdown',None)
+        if not callback:raise HTTPException(409,'Encerramento disponível quando o app é iniciado pelo executável ou run.py.')
+        if engine.generation_lock.locked():await engine.abort()
+        callback()
+        return {'closing':True}
+
+    @app.get('/api/licenses')
+    def licenses():
+        root=ROOT/'licencas'
+        if not root.is_dir():root=ROOT
+        names=['LICENSE','NOTICES.md','THIRD_PARTY_FRONTEND.txt','THIRD_PARTY_PYTHON.txt']
+        items=[{'name':name,'text':(root/name).read_text(encoding='utf-8',errors='replace')} for name in names if (root/name).is_file()]
+        engine_dir=Path(bundled_engine()).parent if bundled_engine() else ROOT/'engine'
+        items += [{'name':'Central Engine / '+name,'text':(engine_dir/name).read_text(encoding='utf-8',errors='replace')} for name in ['LICENSE','NOTICE.md'] if (engine_dir/name).is_file()]
+        return {'licenses':items}
+
     @app.get('/api/source')
     def source():
         path = ROOT/'central-ia-studio-source.zip'
         if not path.is_file():
+            if build['distribution']!='source':raise HTTPException(503,'Fontes embutidas ausentes. Baixe novamente o pacote completo ou o ZIP de fontes correspondente.')
             from scripts.package_source import source_files
             from zipfile import ZipFile, ZIP_DEFLATED
             buffer = io.BytesIO()

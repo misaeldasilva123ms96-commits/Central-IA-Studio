@@ -4,6 +4,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from .runtime import DATA_SCHEMA
 
 class Store:
     def __init__(self, directory):
@@ -11,6 +12,8 @@ class Store:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / 'central.sqlite3'
         with self.db() as db:
+            version=db.execute('PRAGMA user_version').fetchone()[0]
+            if version>DATA_SCHEMA:raise ValueError('Esta base foi criada por uma versão mais nova. Use o aplicativo atualizado; dados preservados.')
             db.executescript('''
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -41,6 +44,7 @@ class Store:
             columns={row[1] for row in db.execute('PRAGMA table_info(conversations)')}
             if 'kind' not in columns:
                 db.execute("ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'")
+            db.execute('PRAGMA user_version='+str(DATA_SCHEMA))
             if db.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                 raise RuntimeError('Banco inconsistente. Preserve o arquivo antes de restaurar um backup.')
 

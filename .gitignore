@@ -16,3 +16,8 @@ Central-IA-Studio-Windows-x64.zip
 SHA256SUMS.txt
 
 Central-IA-Studio-Fontes-e-Documentacao.zip
+
+BUILD_REPORT.json
+TEST_RESULTS.json
+
+DISTRIBUTIONS.json
