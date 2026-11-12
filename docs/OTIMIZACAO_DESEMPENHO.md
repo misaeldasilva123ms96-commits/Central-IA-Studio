@@ -8,7 +8,8 @@ Mudanças mensuráveis isoladas:
 
 - HTTPX compartilhado no ciclo de vida do app, no máximo quatro URLs locais,
   fechado no encerramento. Consultas não recriam o contexto HTTP a cada poll.
-- Metadados GGUF em LRU de 128 entradas, por caminho/tamanho/mtime/ctime. Cada
+- Metadados GGUF em LRU de 128 entradas, por caminho/tamanho/mtime/ctime/identidade e hash dos primeiros 4 KiB (protege
+  contra timestamps de escrita com baixa resolução no Windows). Cada
   retorno é copiado e mudanças do arquivo invalidam a entrada. Diretórios ainda
   são varridos, então novos modelos continuam aparecendo ao atualizar a biblioteca.
 - Pillow/pypdf carregados apenas no processamento que os utiliza. Workers de texto

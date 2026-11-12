@@ -109,7 +109,9 @@ def test_cached_metadata_tracks_replacements(tmp_path):
     path=gguf(tmp_path/'model.gguf');_cached_metadata.cache_clear()
     first=metadata(path);first['quantization']='modified return value'
     assert metadata(path)['quantization']=='Q4_K_M' and _cached_metadata.cache_info().hits>=1
+    before=path.stat()
     path.write_bytes(b'BAD!'+path.read_bytes()[4:])
+    os.utime(path,ns=(before.st_atime_ns,before.st_mtime_ns))
     with pytest.raises(ValueError,match='Assinatura'):metadata(path)
 
 

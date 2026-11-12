@@ -1,5 +1,6 @@
 """Leitura limitada de metadados GGUF v2/v3, sem carregar tensores."""
 import struct
+import hashlib
 from functools import lru_cache
 from copy import deepcopy
 from pathlib import Path
@@ -9,10 +10,13 @@ FILE_TYPES = {0:'F32',1:'F16',2:'Q4_0',3:'Q4_1',7:'Q8_0',8:'Q5_0',9:'Q5_1',10:'Q
 
 def metadata(path):
     path=Path(path).resolve();stat=path.stat()
-    return deepcopy(_cached_metadata(str(path),stat.st_size,stat.st_mtime_ns,stat.st_ctime_ns))
+    # Some Windows filesystems defer/coarsen write timestamps. Check the small
+    # leading header too, without hashing model tensor data on every poll.
+    with path.open('rb') as file:prefix=hashlib.blake2b(file.read(4096),digest_size=16).digest()
+    return deepcopy(_cached_metadata(str(path),stat.st_size,stat.st_mtime_ns,stat.st_ctime_ns,stat.st_ino,prefix))
 
 @lru_cache(maxsize=128)
-def _cached_metadata(path,size,mtime,ctime):
+def _cached_metadata(path,size,mtime,ctime,inode,prefix):
     with open(path, 'rb') as f:
         def read(n):
             if n < 0 or n > 8*1024*1024 or f.tell()+n > 64*1024*1024:
