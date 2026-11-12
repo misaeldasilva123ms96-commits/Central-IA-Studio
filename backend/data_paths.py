@@ -1,5 +1,5 @@
 """Shared writable data, explicit portable mode and non-destructive legacy migration."""
-from contextlib import nullcontext
+from contextlib import closing,nullcontext
 import json
 import os
 from pathlib import Path
@@ -59,7 +59,7 @@ def migrate(source,target):
     target.parent.mkdir(parents=True,exist_ok=True)
     stage=target.parent/('.central-migrating-'+uuid.uuid4().hex);stage.mkdir()
     try:
-        with sqlite3.connect('file:'+quote(str(database).replace('\\','/'),safe='/:')+'?mode=ro',uri=True) as old,sqlite3.connect(stage/'central.sqlite3') as new:
+        with closing(sqlite3.connect('file:'+quote(str(database).replace('\\','/'),safe='/:')+'?mode=ro',uri=True)) as old,closing(sqlite3.connect(stage/'central.sqlite3')) as new:
             if old.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise ValueError('A base antiga está inconsistente. Origem preservada; restaure um backup antes de migrar.')
             old.backup(new)
             if new.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise ValueError('Falha ao verificar a cópia migrada.')
@@ -78,13 +78,14 @@ def migrate(source,target):
             if dest.exists():raise ValueError('Conflito com arquivo de backup na origem. Use uma pasta de destino diferente e revise os dados.')
             shutil.copy2(item,dest)
         # Only the known old bundled engine is normalized; external programs and GGUF paths stay untouched.
-        with sqlite3.connect(stage/'central.sqlite3') as db:
+        with closing(sqlite3.connect(stage/'central.sqlite3')) as db:
             row=db.execute("SELECT value FROM settings WHERE key='settings'").fetchone()
             if row:
                 settings=json.loads(row[0]);exe=settings.get('executable','')
                 expected=source.parent/'engine'/'central-engine-nocuda.exe'
                 if exe and Path(exe).resolve()==expected.resolve():
                     settings['executable']='';db.execute("UPDATE settings SET value=? WHERE key='settings'",(json.dumps(settings),))
+            db.commit()
         report={'status':'migrated','source':str(source),'destination':str(target),'created':time.time(),'gguf_not_copied':skipped,'source_preserved':True,'backup':'backups/'+backup}
         (stage/'migration.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
         if target.exists():target.rmdir()  # only an empty destination, never user files
