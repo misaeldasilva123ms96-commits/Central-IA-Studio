@@ -65,7 +65,8 @@ def main():
         finally:sock.close()
         return 0
     except (OSError,ValueError,sqlite3.Error) as error:
-        print('Não foi possível iniciar o Central IA Studio: '+str(error),file=sys.stderr,flush=True)
+        detail=('Não foi possível abrir ou atualizar a base SQLite. Verifique a permissão de escrita da pasta e do banco ou use --data-dir em uma pasta gravável. Os dados foram preservados. Diagnóstico: '+str(error)) if isinstance(error,sqlite3.Error) else str(error)
+        print('Não foi possível iniciar o Central IA Studio: '+detail,file=sys.stderr,flush=True)
         if os.name=='nt' and not args.no_browser and sys.stdin.isatty():
             try:input('Pressione Enter para fechar. Seus dados foram preservados. ')
             except (EOFError,KeyboardInterrupt):pass
