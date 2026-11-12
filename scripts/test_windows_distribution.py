@@ -44,17 +44,36 @@ def shell(script):
     if result.returncode:raise RuntimeError(result.stdout+result.stderr)
     return result.stdout.strip()
 
+_acl_snapshots={}
+
 def deny_write(path,deny=True):
-    # Deny specific writes, not generic W: generic write also includes
-    # SYNCHRONIZE/READ_CONTROL required by CreateProcess on an executable.
-    # A directory read-only attribute alone does not enforce this test.
+    # Use an RX-only allow ACL. Explicit denies can also reject executable
+    # image mapping on Windows; file/directory read-only attributes are weaker.
     escaped=str(path).replace("'","''")
-    if deny:shell(f"$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; & icacls '{escaped}' /deny \"*$($sid):(OI)(CI)(WD,AD,WEA,WA,D,DC)\" /T /C | Out-Null; if ($LASTEXITCODE) {{ exit 1 }}")
-    else:shell(f"$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; & icacls '{escaped}' /remove:d \"*$sid\" /T /C | Out-Null")
+    if deny:
+        _acl_snapshots[str(path)]=shell(f"(Get-Acl '{escaped}').Sddl")
+        shell(f"$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; & icacls '{escaped}' /inheritance:r /grant:r \"*$($sid):(OI)(CI)(RX)\" /C | Out-Null; if ($LASTEXITCODE) {{ exit 1 }}")
+    else:
+        sddl=_acl_snapshots.pop(str(path)).replace("'","''")
+        shell(f"$acl=Get-Acl '{escaped}'; $acl.SetSecurityDescriptorSddlForm('{sddl}'); Set-Acl '{escaped}' $acl")
     if deny:
         try:(Path(path)/'must-not-write').write_text('x')
         except PermissionError:return
         raise AssertionError('Read-only test precondition failed: ACL still permits writes')
+
+def acl_preflight():
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix='central acl ') as temporary:
+        folder=Path(temporary)/'read execute only';folder.mkdir()
+        exe=folder/'whoami.exe';shutil.copy2(Path(os.environ['SYSTEMROOT'])/'System32/whoami.exe',exe)
+        try:
+            deny_write(folder)
+            result=subprocess.run([str(exe)],capture_output=True,timeout=10)
+            assert result.returncode==0,result.stderr
+        finally:
+            if str(folder) in _acl_snapshots:deny_write(folder,False)
+    print('ACL preflight passed: execution allowed, writing denied, original ACL restored.')
+
 
 def firewall(exe,name,enable=True):
     if enable:
@@ -294,5 +313,9 @@ def run(mode,model,fixture_mcp):
     return report
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--format',required=True,choices=['onedir','onefile']);parser.add_argument('--model',required=True);parser.add_argument('--mcp-fixture',required=True)
-    args=parser.parse_args();run(args.format,Path(args.model).resolve(),Path(args.mcp_fixture).resolve())
+    parser=argparse.ArgumentParser();parser.add_argument('--acl-preflight',action='store_true');parser.add_argument('--format',choices=['onedir','onefile']);parser.add_argument('--model');parser.add_argument('--mcp-fixture')
+    args=parser.parse_args()
+    if args.acl_preflight:acl_preflight()
+    else:
+        if not all([args.format,args.model,args.mcp_fixture]):parser.error('--format, --model and --mcp-fixture are required')
+        run(args.format,Path(args.model).resolve(),Path(args.mcp_fixture).resolve())
