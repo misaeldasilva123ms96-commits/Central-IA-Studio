@@ -40,7 +40,7 @@ def wait_dead(pid,timeout=12):
     return False
 
 def shell(script):
-    result=subprocess.run(['powershell','-NoProfile','-NonInteractive','-Command',script],capture_output=True,text=True)
+    result=subprocess.run(['pwsh','-NoProfile','-NonInteractive','-Command',script],capture_output=True,text=True)
     if result.returncode:raise RuntimeError(result.stdout+result.stderr)
     return result.stdout.strip()
 
