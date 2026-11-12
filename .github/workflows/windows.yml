@@ -146,6 +146,7 @@ jobs:
         run: |
           if (Test-Path work/firewall-before.json) {
             foreach ($firewallProfile in (Get-Content work/firewall-before.json -Raw | ConvertFrom-Json)) {
-              Set-NetFirewallProfile -Profile $firewallProfile.Name -Enabled ([Convert]::ToBoolean($firewallProfile.Enabled))
+              $enabledValue = if ([Convert]::ToBoolean($firewallProfile.Enabled)) { 'True' } else { 'False' }
+              Set-NetFirewallProfile -Profile $firewallProfile.Name -Enabled $enabledValue
             }
           }

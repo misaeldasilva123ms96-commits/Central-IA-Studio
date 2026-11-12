@@ -31,6 +31,7 @@ def main():
     for result in results:
         measured['formats'][result['format']]={key:result[key] for key in ('distributed_bytes','installed_bytes','samples','forced_exit_temp_remains')}
     (ROOT/'BUILD_REPORT.json').write_text(json.dumps(measured,indent=2),encoding='utf-8')
+    print('BUILD_REPORT '+json.dumps(measured),flush=True)
     print('Both distributions passed; version/commit/resources/schema match; bidirectional shared data verified.')
 
 if __name__=='__main__':main()

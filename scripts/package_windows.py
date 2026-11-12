@@ -47,8 +47,8 @@ def package(root=ROOT):
         if runtime_engine.exists():
             shutil.rmtree(runtime_engine)
         runtime_engine.mkdir()
-        for name in RUNTIME_ENGINE:
-            shutil.copy2(engine/name, runtime_engine/name)
+        for file in engine.iterdir():
+            if file.name in RUNTIME_ENGINE or file.suffix.lower()=='.dll':shutil.copy2(file,runtime_engine/file.name)
         internal_engine=runtime/'CentralIAStudio/_internal/engine'
         if internal_engine.exists():shutil.rmtree(internal_engine)
         notices = runtime/'CentralIAStudio/licencas'

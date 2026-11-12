@@ -162,7 +162,7 @@ def run(mode,model,fixture_mcp):
     legacy=exe.parent/'data';legacy_cid=seed_legacy(legacy)
     env=os.environ.copy()
     for key in ('PYTHONPATH','PYTHONHOME','VIRTUAL_ENV','CENTRAL_DATA_DIR'):env.pop(key,None)
-    env['PATH']=os.path.join(env['SystemRoot'],'System32')
+    env['PATH']=os.path.join(os.environ['SYSTEMROOT'],'System32')
     env['LOCALAPPDATA']=str(root/'user profile')
     temp=root/'temporary with spaces';temp.mkdir(exist_ok=True);env['TEMP']=env['TMP']=str(temp)
     rule='Central-IA-CI-'+mode;firewall(exe,rule)
@@ -288,6 +288,7 @@ def run(mode,model,fixture_mcp):
         if locked:deny_write(install,False)
         firewall(exe,rule,False)
         (ROOT/f'work/test-{mode}.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+        print('DISTRIBUTION_TEST_REPORT '+json.dumps(report),flush=True)
     return report
 
 if __name__=='__main__':
