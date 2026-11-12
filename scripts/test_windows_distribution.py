@@ -45,9 +45,11 @@ def shell(script):
     return result.stdout.strip()
 
 def deny_write(path,deny=True):
-    # A read-only directory attribute is insufficient on Windows: verify a real ACL.
+    # Deny specific writes, not generic W: generic write also includes
+    # SYNCHRONIZE/READ_CONTROL required by CreateProcess on an executable.
+    # A directory read-only attribute alone does not enforce this test.
     escaped=str(path).replace("'","''")
-    if deny:shell(f"$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; & icacls '{escaped}' /deny \"*$($sid):(OI)(CI)(W,D)\" /T /C | Out-Null; if ($LASTEXITCODE) {{ exit 1 }}")
+    if deny:shell(f"$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; & icacls '{escaped}' /deny \"*$($sid):(OI)(CI)(WD,AD,WEA,WA,D,DC)\" /T /C | Out-Null; if ($LASTEXITCODE) {{ exit 1 }}")
     else:shell(f"$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; & icacls '{escaped}' /remove:d \"*$sid\" /T /C | Out-Null")
     if deny:
         try:(Path(path)/'must-not-write').write_text('x')

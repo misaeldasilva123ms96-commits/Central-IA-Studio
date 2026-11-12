@@ -303,6 +303,7 @@ def create_app(data_dir=None):
         async with engine.lifecycle_lock:
             await asyncio.to_thread(engine.stop)
         await engine.close_http_pool()
+        await engine.open_http_pool()
         logger.info('Parada do motor gerenciado solicitada')
         return {'stopped':True}
 

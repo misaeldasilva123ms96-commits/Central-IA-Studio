@@ -102,6 +102,9 @@ def test_shared_http_pool_is_bounded_and_closed(client,fake_engine):
         original=list(engine._http_clients.values());await engine.close_http_pool()
         assert all(c.is_closed for c in original)
     client.portal.call(check)
+    assert client.post('/api/engine/stop',json={}).status_code==200
+    assert client.get('/api/engine').json()['connected']
+    assert engine._http_pool and len(engine._http_clients)==1
 
 
 def test_cached_metadata_tracks_replacements(tmp_path):
