@@ -52,7 +52,7 @@ def deny_write(path,deny=True):
     escaped=str(path).replace("'","''")
     if deny:
         _acl_snapshots[str(path)]=shell(f"(Get-Acl '{escaped}').Sddl")
-        shell(f"$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; & icacls '{escaped}' /inheritance:r /grant:r \"*$($sid):(OI)(CI)(RX)\" /C | Out-Null; if ($LASTEXITCODE) {{ exit 1 }}")
+        shell(f"$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=[Security.AccessControl.DirectorySecurity]::new(); $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $rule=[Security.AccessControl.FileSystemAccessRule]::new($sid,'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath '{escaped}' -AclObject $acl -ErrorAction Stop")
     else:
         sddl=_acl_snapshots.pop(str(path)).replace("'","''")
         shell(f"$acl=Get-Acl '{escaped}'; $acl.SetSecurityDescriptorSddlForm('{sddl}'); Set-Acl '{escaped}' $acl")
