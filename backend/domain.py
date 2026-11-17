@@ -95,15 +95,16 @@ def thinking_value(p):
     return 'off' if p.mode == 'rapido' else 'on' if p.mode == 'profundo' else p.thinking
 
 def bundled_engine():
-    base = Path(sys.executable).resolve().parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parent.parent
-    name = 'central-engine-nocuda.exe' if os.name == 'nt' else 'central-engine-nocuda'
-    candidate = base/'engine'/name
-    return str(candidate) if candidate.is_file() else ''
+    from .runtime import bundled_engine as locate
+    return locate()
+
 
 def build_command(executable, model, profile, port):
     exe = Path(executable).expanduser().resolve()
     if not exe.is_file() or (os.name == 'nt' and exe.suffix.lower() != '.exe'):
         raise ValueError('Selecione um executável Central Engine ou KoboldCpp existente')
+    if exe.stem.lower()=='centraliastudio' or (getattr(sys,'frozen',False) and exe==Path(sys.executable).resolve()):
+        raise ValueError('Este é o executável do aplicativo, não o motor. Use a detecção automática do Central Engine ou um KoboldCpp externo.')
     path = Path(model).resolve()
     if not path.is_file() or path.suffix.lower() != '.gguf':
         raise ValueError('Modelo GGUF inexistente')

@@ -1,5 +1,6 @@
 """The portable package must retain runtime resources and offline source access."""
 import io
+import json
 from pathlib import Path
 from zipfile import ZipFile
 import pytest
@@ -17,6 +18,10 @@ def zip_bytes(name, content):
 def test_separate_runtime_and_complete_sources(tmp_path):
     def put(name,content):
         path=tmp_path/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(content)
+    metadata={'version':'0.6.0','commit':'a'*40,'schema':1,'payload_digest':'b'*64}
+    put('dist/onefile/CentralIAStudio.exe',b'MZtest-only onefile')
+    put('dist/CentralIAStudio/_internal/build-info.json',json.dumps(metadata|{'distribution':'onedir'}).encode())
+    put('work/freeze-resources/onefile/build-info.json',json.dumps(metadata|{'distribution':'onefile'}).encode())
     source=zip_bytes('backend/app.py',b'# corresponding Studio source')
     put('dist/CentralIAStudio/CentralIAStudio.exe',b'test-only frozen executable')
     put('dist/CentralIAStudio/_internal/runtime.dll',b'unchanged runtime resource')
@@ -33,6 +38,7 @@ def test_separate_runtime_and_complete_sources(tmp_path):
     put('INICIAR_CENTRAL_IA_STUDIO.cmd',b'@echo off\r\nCentralIAStudio\\CentralIAStudio.exe')
     put('docs/guia.md','Guia completo ç'.encode())
     app,extras=package(tmp_path)
+    assert (tmp_path/'CentralIAStudio.exe').read_bytes()==b'MZtest-only onefile'
     verify(app,{'ABRIR_CENTRAL_IA.cmd','CentralIAStudio/CentralIAStudio.exe'})
     verify(extras,{'Fontes/Motor/llama-cpp-source.zip','Documentacao/docs/guia.md'})
     with ZipFile(app) as archive:

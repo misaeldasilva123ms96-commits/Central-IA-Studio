@@ -1,5 +1,6 @@
 """Pacote de fontes sem modelos, motores, dados do usuário ou arquivos de trabalho."""
 import hashlib
+import subprocess
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 ROOT=Path(__file__).resolve().parent.parent
@@ -7,9 +8,19 @@ EXCLUDED={'.git','work','node_modules','__pycache__','.pytest_cache','.venv','da
 
 def source_files():
     paths=[]
-    for p in sorted(ROOT.rglob('*')):
+    try:
+        top=Path(subprocess.check_output(['git','rev-parse','--show-toplevel'],cwd=ROOT,stderr=subprocess.DEVNULL,text=True).strip()).resolve()
+        if top!=ROOT.resolve():raise ValueError('not repository root')
+        tracked=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\x00')
+        candidates=[ROOT/name for name in tracked if name]
+        # Vite may regenerate platform-dependent asset names after checkout.
+        candidates=list(set(candidates)|{p for p in (ROOT/'frontend/dist').rglob('*') if p.is_file()})
+    except (OSError,subprocess.CalledProcessError,ValueError):candidates=list(ROOT.rglob('*'))
+    for p in sorted(candidates):
         rel=p.relative_to(ROOT)
-        if p.name == 'SHA256SUMS.txt' or not p.is_file() or set(rel.parts)&EXCLUDED or rel.parts[0]=='dist' or p.suffix.lower() in ['.exe','.gguf','.zip','.pyc','.spec']:
+        if p.is_symlink() or p.name.startswith('.env') or p.suffix.lower() in ['.pem','.key'] or p.name in {'BUILD_REPORT.json','TEST_RESULTS.json','DISTRIBUTIONS.json'}:continue
+        bundled_example=rel.as_posix() in {'frontend/public/central-demo-plugin.zip','frontend/dist/central-demo-plugin.zip'}
+        if p.name == 'SHA256SUMS.txt' or not p.is_file() or set(rel.parts)&EXCLUDED or rel.parts[0]=='dist' or (p.suffix.lower() in ['.exe','.gguf','.zip','.pyc','.spec'] and not bundled_example):
             continue
         paths.append((p,rel))
     return paths

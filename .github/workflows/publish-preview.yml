@@ -39,21 +39,31 @@ jobs:
           test "$(gh release view "$RELEASE_TAG" --json targetCommitish --jq .targetCommitish)" = "$EXPECTED_COMMIT"
           test "$(gh run view "$ARTIFACT_RUN" --json conclusion --jq .conclusion)" = success
           BUILD_SHA=$(gh run view "$ARTIFACT_RUN" --json headSha --jq .headSha)
-          test "$(gh api "repos/$GH_REPO/git/commits/$BUILD_SHA" --jq .tree.sha)" = "$(gh api "repos/$GH_REPO/git/commits/$EXPECTED_COMMIT" --jq .tree.sha)"
+          test "$BUILD_SHA" = "$EXPECTED_COMMIT"
       - name: Baixar artefatos e conferir hashes
         run: |
-          gh run download "$ARTIFACT_RUN" -n Central-IA-Studio-Windows-x64 -D assets
-          cd assets
-          sha256sum --check SHA256SUMS.txt
+          gh run download "$ARTIFACT_RUN" -n Central-IA-Studio-Windows-x64 -D onedir
+          gh run download "$ARTIFACT_RUN" -n Central-IA-Studio-ONEFILE-Windows-x64 -D onefile
+          gh run download "$ARTIFACT_RUN" -n Central-IA-Studio-Fontes-e-Documentacao -D sources
+          (cd onedir && sha256sum --check SHA256SUMS.txt)
+          (cd onefile && sha256sum --check SHA256SUMS.txt)
+          (cd sources && sha256sum --check SHA256SUMS.txt)
+          mkdir assets
+          cp onedir/Central-IA-Studio-Windows-x64.zip onefile/CentralIAStudio.exe sources/Central-IA-Studio-Fontes-e-Documentacao.zip sources/TEST_RESULTS.json sources/BUILD_REPORT.json sources/DISTRIBUTIONS.json assets/
+          cp sources/SHA256SUMS_ALL.txt assets/SHA256SUMS.txt
+          (cd assets && sha256sum --check SHA256SUMS.txt)
           python - <<'PY'
-          from zipfile import ZipFile
+          import json,os
           from pathlib import Path
-          for p in Path('.').glob('*.zip'):
-              with ZipFile(p) as z:
-                  assert z.testzip() is None, p
+          from zipfile import ZipFile
+          root=Path('assets');r=json.loads((root/'TEST_RESULTS.json').read_text())
+          assert r['passed'] and r['bidirectional_shared_data'] and r['commit']==os.environ['EXPECTED_COMMIT']
+          assert len(r['distributions'])==2 and all(d['passed'] for d in r['distributions'])
+          for p in root.glob('*.zip'):
+              with ZipFile(p) as z:assert z.testzip() is None
           PY
       - name: Anexar e publicar previa
         run: |
-          gh release upload "$RELEASE_TAG" assets/Central-IA-Studio-Windows-x64.zip assets/Central-IA-Studio-Fontes-e-Documentacao.zip assets/SHA256SUMS.txt --clobber
-          test "$(gh release view "$RELEASE_TAG" --json assets --jq '.assets | length')" = 3
+          gh release upload "$RELEASE_TAG" assets/CentralIAStudio.exe assets/Central-IA-Studio-Windows-x64.zip assets/Central-IA-Studio-Fontes-e-Documentacao.zip assets/SHA256SUMS.txt assets/DISTRIBUTIONS.json assets/BUILD_REPORT.json assets/TEST_RESULTS.json --clobber
+          test "$(gh release view "$RELEASE_TAG" --json assets --jq '.assets | length')" = 7
           gh release edit "$RELEASE_TAG" --draft=false --prerelease

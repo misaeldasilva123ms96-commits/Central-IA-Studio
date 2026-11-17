@@ -1,5 +1,7 @@
 name: Validar e empacotar Windows x64
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   pull_request:
     branches: [main]
@@ -11,6 +13,8 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -21,6 +25,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: python -m pip install -r requirements-dev.txt
+      - name: Verificar preparacao de ACL somente leitura e execucao
+        run: python scripts/test_windows_distribution.py --acl-preflight
       - uses: actions/checkout@v4
         with:
           repository: ggml-org/llama.cpp
@@ -79,105 +85,70 @@ jobs:
       - run: python scripts/package_source.py
       - shell: pwsh
         run: ./scripts/build_windows.ps1
-      - shell: pwsh
+      - name: Preparar navegador e servidor MCP independente para testes
+        shell: pwsh
         run: |
-          Expand-Archive 'Central-IA-Studio-Windows-x64.zip' 'work/package smoke'
-          $packageRoot = Join-Path $PWD 'work/package smoke'
-          $packageTop = @(Get-ChildItem $packageRoot -Name)
-          if ($packageTop.Count -ne 3 -or !(Test-Path (Join-Path $packageRoot 'ABRIR_CENTRAL_IA.cmd')) -or !(Test-Path (Join-Path $packageRoot 'LEIA-ME.txt'))) { throw 'Pasta inicial do pacote deve conter apenas iniciador, guia e CentralIAStudio' }
-          $expectedVersion = (Get-Content 'frontend/package.json' -Raw | ConvertFrom-Json).version
-          $exe = Join-Path $PWD 'work/package smoke/CentralIAStudio/CentralIAStudio.exe'
-          $process = Start-Process $exe -ArgumentList '--no-browser' -PassThru
-          try {
-            $ready = $false
-            for ($i=0; $i -lt 20; $i++) {
-              try {
-                $r = Invoke-RestMethod 'http://127.0.0.1:8765/api/bootstrap'
-                if ($r.version -eq $expectedVersion) { $ready = $true; break }
-              } catch { Start-Sleep -Seconds 1 }
-            }
-            if (!$ready) { throw 'Executavel empacotado nao iniciou' }
-            if (!$r.settings.executable.EndsWith('central-engine-nocuda.exe')) { throw 'Motor incluido nao foi detectado' }
-            if (!(Test-Path $r.settings.executable)) { throw 'Executavel do motor ausente' }
-            $page = Invoke-WebRequest 'http://127.0.0.1:8765/'
-            if (!$page.Content.Contains('Central IA Studio')) { throw 'Frontend ausente' }
-            $releaseHeaders = @{ 'X-Central-Token' = $r.token }
-            $attachmentFile = Join-Path $PWD 'work/package smoke/anexo.txt'
-            Set-Content $attachmentFile 'Arquivo de teste do EXE empacotado' -Encoding utf8
-            $releaseAttachment = Invoke-RestMethod 'http://127.0.0.1:8765/api/attachments?name=anexo.txt' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $attachmentFile
-            if ($releaseAttachment.kind -ne 'document') { throw 'Extrator de anexos do EXE falhou' }
-            $imageFile = Join-Path $PWD 'work/package smoke/imagem.png'
-            python -c "from PIL import Image; Image.new('RGB',(16,16),'red').save(r'$imageFile')"
-            if ($LASTEXITCODE -ne 0) { throw 'Fixture PNG falhou' }
-            $releaseImage = Invoke-RestMethod 'http://127.0.0.1:8765/api/attachments?name=imagem.png' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $imageFile
-            if ($releaseImage.kind -ne 'image') { throw 'Leitor de imagens do EXE falhou' }
-            $pdfFile = Join-Path $PWD 'work/package smoke/documento.pdf'
-            python -c "from pypdf import PdfWriter; w=PdfWriter(); w.add_blank_page(width=100,height=100); w.write(r'$pdfFile')"
-            if ($LASTEXITCODE -ne 0) { throw 'Fixture PDF falhou' }
-            $releasePdf = Invoke-RestMethod 'http://127.0.0.1:8765/api/attachments?name=documento.pdf' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $pdfFile
-            if ($releasePdf.kind -ne 'document') { throw 'Leitor PDF do EXE falhou' }
-            Write-Host 'Studio EXE: extracao isolada de texto, PNG e PDF passou.'
-            $exampleZip = Join-Path $PWD 'work/package smoke/plugin-example.zip'
-            Invoke-WebRequest 'http://127.0.0.1:8765/central-demo-plugin.zip' -OutFile $exampleZip
-            $previewPlugin = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions/import?name=demo.zip' -Method Post -Headers $releaseHeaders -ContentType 'application/octet-stream' -InFile $exampleZip
-            if ($previewPlugin.name -ne 'central-demo') { throw 'Preview do plugin no EXE falhou' }
-            $installHeaders = @{ 'X-Central-Token' = $r.token; 'X-Import-Digest' = $previewPlugin.digest }
-            $installedPlugin = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions/import?name=demo.zip&confirm=true' -Method Post -Headers $installHeaders -ContentType 'application/octet-stream' -InFile $exampleZip
-            $mcpId = $installedPlugin.servers[0].id
-            if ($installedPlugin.servers[0].connected) { throw 'Importacao iniciou servidor sem consentimento' }
-            $mcpConnected = Invoke-RestMethod "http://127.0.0.1:8765/api/mcp/$mcpId/connect" -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{"confirmed":true}'
-            if (!$mcpConnected.servers[0].connected -or $mcpConnected.servers[0].tools[0].name -ne 'demo_sum') { throw 'SDK MCP do EXE congelado nao conectou/descobriu ferramentas' }
-            Invoke-RestMethod "http://127.0.0.1:8765/api/mcp/$mcpId/disconnect" -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{}' | Out-Null
-            Invoke-RestMethod "http://127.0.0.1:8765/api/extensions/$($installedPlugin.id)" -Method Patch -Headers $releaseHeaders -ContentType 'application/json' -Body '{"action":"disable"}' | Out-Null
-            Write-Host 'Studio EXE: importacao portavel, consentimento e MCP STDIO real passaram.'
-
-            $releaseModelDir = Join-Path $PWD 'work/package smoke/modelo de teste'
-            New-Item -ItemType Directory -Force $releaseModelDir | Out-Null
-            $releaseModelPath = Join-Path $releaseModelDir 'tiny.gguf'
-            Copy-Item 'work/tiny.gguf' $releaseModelPath
-            $folderListing = Invoke-RestMethod ('http://127.0.0.1:8765/api/folders?path=' + [uri]::EscapeDataString($releaseModelDir))
-            if ($folderListing.path -ne [IO.Path]::GetFullPath($releaseModelDir)) { throw 'Seletor de pastas do EXE empacotado falhou' }
-            $releaseSettings = @{engine_url='http://127.0.0.1:5001'; executable=$r.settings.executable; folders=@($releaseModelDir)}
-            Invoke-RestMethod 'http://127.0.0.1:8765/api/settings' -Method Put -Headers $releaseHeaders -ContentType 'application/json' -Body ($releaseSettings | ConvertTo-Json) | Out-Null
-            # Keep the tiny byte-token fixture's context focused on native inference.
-            $releaseExtensions = Invoke-RestMethod 'http://127.0.0.1:8765/api/extensions'
-            foreach ($extension in $releaseExtensions.items) {
-              if ($extension.enabled) { Invoke-RestMethod "http://127.0.0.1:8765/api/extensions/$($extension.id)" -Method Patch -Headers $releaseHeaders -ContentType 'application/json' -Body '{"action":"disable"}' | Out-Null }
-            }
-            $releaseProfile = $r.profile
-            $releaseProfile.cache_kv = 'f16'; $releaseProfile.flash_attention = $false; $releaseProfile.max_output = 8
-            $releaseStarted = Invoke-RestMethod 'http://127.0.0.1:8765/api/engine/start' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body (@{path=$releaseModelPath; profile=$releaseProfile} | ConvertTo-Json)
-            $releaseEnginePid = $releaseStarted.pid
-            $releaseConnected = $false
-            for ($i=0; $i -lt 30; $i++) {
-              $releaseStatus = Invoke-RestMethod 'http://127.0.0.1:8765/api/engine'
-              if ($releaseStatus.connected) { $releaseConnected = $true; break }
-              Start-Sleep -Seconds 1
-            }
-            if (!$releaseConnected) { throw 'Studio EXE nao conectou ao motor incluido' }
-            $releaseConversation = Invoke-RestMethod 'http://127.0.0.1:8765/api/conversations' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{"title":"Teste EXE com motor"}'
-            $releaseReply = Invoke-WebRequest 'http://127.0.0.1:8765/api/generate' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body (@{conversation=$releaseConversation.id; content='Teste real do pacote'; profile=$releaseProfile} | ConvertTo-Json)
-            if (!$releaseReply.Content.Contains('event: done') -or $releaseReply.Content.Contains('event: error')) { throw 'Chat pelo Studio EXE falhou' }
-            $releaseHistory = Invoke-RestMethod "http://127.0.0.1:8765/api/conversations/$($releaseConversation.id)"
-            if ($null -eq $releaseHistory[-1].stats.generated_tokens) { throw 'Tokens nao registrados pelo Studio EXE' }
-            Invoke-RestMethod 'http://127.0.0.1:8765/api/engine/stop' -Method Post -Headers $releaseHeaders -ContentType 'application/json' -Body '{}' | Out-Null
-            Write-Host 'Studio EXE -> Central Engine incluido -> GGUF aleatorio -> SSE -> SQLite: passou.'
-
-            Invoke-WebRequest 'http://127.0.0.1:8765/api/source' -OutFile 'work/bundled-source.zip'
-            python -c "from zipfile import ZipFile; z=ZipFile('work/bundled-source.zip'); assert z.testzip() is None; assert 'backend/app.py' in z.namelist(); assert 'scripts/package_windows.py' in z.namelist()"
-            if ($LASTEXITCODE -ne 0) { throw 'Fontes correspondentes ausentes' }
-          } finally {
-            if ($releaseEnginePid) { Stop-Process -Id $releaseEnginePid -ErrorAction SilentlyContinue }
-            if (!$process.HasExited) { Stop-Process -Id $process.Id }
-          }
+          python -m playwright install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Navegador de teste indisponivel' }
+          python -m PyInstaller --noconfirm --clean --onefile --console --noupx --name mcp-fixture --distpath work/smoke-tools --workpath work/mcp-fixture-build --specpath work/mcp-fixture-spec examples/extensions/central-demo/server.py
+          if ($LASTEXITCODE -ne 0) { throw 'Fixture MCP independente falhou' }
+      - name: Habilitar firewall para isolar os aplicativos de teste
+        shell: pwsh
+        run: |
+          Get-NetFirewallProfile | Select-Object Name,@{Name='Enabled';Expression={ [string]$_.Enabled -eq 'True' }} | ConvertTo-Json | Set-Content work/firewall-before.json
+          Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True
+      - name: Medir otimizacoes controladas
+        run: python scripts/measure_optimizations.py
+      - name: Testar ONEDIR Windows real
+        id: onedir
+        continue-on-error: true
+        run: python scripts/test_windows_distribution.py --format onedir --model work/tiny.gguf --mcp-fixture work/smoke-tools/mcp-fixture.exe
+      - name: Testar ONEFILE Windows real
+        id: onefile
+        continue-on-error: true
+        run: python scripts/test_windows_distribution.py --format onefile --model work/tiny.gguf --mcp-fixture work/smoke-tools/mcp-fixture.exe
+      - name: Exigir aprovacao dos dois formatos e verificar intercambio
+        shell: pwsh
+        run: |
+          if ('${{ steps.onedir.outcome }}' -ne 'success' -or '${{ steps.onefile.outcome }}' -ne 'success') { throw 'Uma distribuicao falhou; atualizacao nao aprovada' }
+          python scripts/finalize_windows_report.py
+          if ($LASTEXITCODE -ne 0) { throw 'Paridade ou intercambio de dados falhou' }
+          python scripts/verify_package.py
+          if ($LASTEXITCODE -ne 0) { throw 'Hashes finais falharam' }
       - uses: actions/upload-artifact@v4
         with:
           name: Central-IA-Studio-Windows-x64
-          path: |
-            Central-IA-Studio-Windows-x64.zip
-            Central-IA-Studio-Fontes-e-Documentacao.zip
-            SHA256SUMS.txt
+          path: work/artifacts/onedir/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Central-IA-Studio-ONEFILE-Windows-x64
+          path: work/artifacts/onefile/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Central-IA-Studio-Fontes-e-Documentacao
+          path: work/artifacts/sources/
       - uses: actions/upload-artifact@v4
         with:
           name: Central-Engine-Windows-x64-CPU
           path: work/engine-package/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Diagnostico-dos-testes-Windows
+          path: |
+            work/test-*.json
+            work/optimization-measurements.json
+            work/smoke */**/*.log
+            work/smoke */**/*.png
+            TEST_RESULTS.json
+            BUILD_REPORT.json
+      - name: Restaurar perfis de firewall do runner
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path work/firewall-before.json) {
+            foreach ($firewallProfile in (Get-Content work/firewall-before.json -Raw | ConvertFrom-Json)) {
+              $enabledValue = if ([Convert]::ToBoolean($firewallProfile.Enabled)) { 'True' } else { 'False' }
+              Set-NetFirewallProfile -Profile $firewallProfile.Name -Enabled $enabledValue
+            }
+          }

@@ -9,8 +9,6 @@ import warnings
 from pathlib import PurePath
 from zipfile import ZipFile
 from xml.etree import ElementTree as ET
-from PIL import Image, ImageOps
-from pypdf import PdfReader
 
 MAX_FILE=8*1024*1024
 MAX_TEXT=60000
@@ -61,6 +59,7 @@ def ingest(name,data):
     kind='document';mime='application/octet-stream';text='';warning='';vision=None
     try:
         if extension in IMAGE_EXTENSIONS:
+            from PIL import Image,ImageOps
             with warnings.catch_warnings():
                 warnings.simplefilter('error',Image.DecompressionBombWarning)
                 with Image.open(io.BytesIO(data)) as image:
@@ -80,6 +79,7 @@ def ingest(name,data):
             if '\x00' in text:raise ValueError('Arquivo binário não é texto legível.')
             mime='text/plain'
         elif extension=='pdf':
+            from pypdf import PdfReader
             pdf=PdfReader(io.BytesIO(data),strict=False)
             if pdf.is_encrypted:raise ValueError('PDF protegido por senha não é aceito.')
             if len(pdf.pages)>40:raise ValueError('PDF limitado a 40 páginas; divida o documento.')
@@ -135,9 +135,10 @@ def _extract_worker(pipe,name,data):
         if __import__('os').name!='nt':
             import resource
             resource.setrlimit(resource.RLIMIT_AS,(512*1024*1024,512*1024*1024))
-        from pypdf import overwrite_configuration
-        overwrite_configuration(maximum_declared_stream_length=8*1024*1024,zlib_maximum_output_length=4*1024*1024,
-                                stream_decoding_work_maximum_length=8*1024*1024)
+        if name.strip().lower().endswith('.pdf'):
+            from pypdf import overwrite_configuration
+            overwrite_configuration(maximum_declared_stream_length=8*1024*1024,zlib_maximum_output_length=4*1024*1024,
+                                    stream_decoding_work_maximum_length=8*1024*1024)
         pipe.send((True,ingest(name,data)))
     except BaseException as error:
         pipe.send((False,str(error) or 'Falha ao extrair documento.'))
